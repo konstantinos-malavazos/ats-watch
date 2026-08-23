@@ -1,0 +1,4 @@
+# Local run state. Ephemeral per install; never commit it.
+.ats-watch-state.json
+.ats-watch-state.json.tmp-*
+node_modules/

@@ -1,0 +1,179 @@
+#!/usr/bin/env node
+// ats-watch - personal daily job watcher over public ATS feeds.
+//
+// Pipeline: fetch -> normalise -> dedupe -> persist -> select first-seen
+//           -> filter -> rank -> print.
+//
+// STDOUT IS THE PRODUCT: a normal run prints a short digest and nothing else,
+// and prints nothing at all when there is no news. Everything diagnostic goes
+// to stderr. Exit codes: 0 = success (including "no new jobs"), 1 = the run
+// could not be completed at all, 2 = bad usage.
+
+import { readFile } from 'node:fs/promises';
+import { parseCliArgs, HELP_TEXT } from './lib/args.js';
+import { makeLogger } from './lib/log.js';
+import { loadState, saveState, defaultStatePath } from './lib/store.js';
+import { selectNew } from './lib/seen.js';
+import { adapterFor } from './lib/adapters/index.js';
+import { politeSequential } from './lib/http.js';
+import { filterSince, applyLimit } from './lib/filter.js';
+import { rankJobs } from './lib/rank.js';
+import { renderDigest } from './lib/render.js';
+
+const REQUEST_DELAY_MS = 1000;
+const REQUEST_TIMEOUT_MS = 15000;
+
+main().catch((err) => {
+  process.stderr.write(`error: ${err && err.message ? err.message : err}\n`);
+  if (err && err.stack) process.stderr.write(`  ${err.stack}\n`);
+  process.exitCode = 1;
+});
+
+async function main() {
+  let opts;
+  try {
+    opts = parseCliArgs();
+  } catch (err) {
+    process.stderr.write(`error: ${err.message}\n\n${HELP_TEXT}\n`);
+    process.exitCode = 2;
+    return;
+  }
+
+  if (opts.help) {
+    process.stdout.write(`${HELP_TEXT}\n`);
+    return;
+  }
+
+  const log = makeLogger({ quiet: opts.quiet });
+  const companies = await loadCompanies(opts.companiesPath, log);
+  if (!companies.length) {
+    log.warn(`no companies configured in ${opts.companiesPath} - nothing to do`);
+    return;
+  }
+
+  // --- fetch -------------------------------------------------------------
+  // One failing source degrades the run; it never aborts it.
+  log.info(`fetching ${companies.length} source(s)`);
+  const { results: fetched, failures } = await politeSequential(
+    companies,
+    (company) => adapterFor(company.ats).fetchJobs(company, {
+      log,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    }),
+    { delayMs: REQUEST_DELAY_MS, log },
+  );
+
+  if (failures.length) {
+    log.warn(`${failures.length} of ${companies.length} source(s) failed; continuing with the rest`);
+  }
+  if (!fetched.length) {
+    if (failures.length === companies.length) {
+      log.error('every source failed - no data to report');
+      process.exitCode = 1;
+      return;
+    }
+    log.info('no jobs returned by any source');
+    return;
+  }
+  log.info(`fetched ${fetched.length} posting(s)`);
+
+  // --- dedupe + first-seen ----------------------------------------------
+  const statePath = opts.statePath || defaultStatePath();
+  const state = await loadState(statePath);
+  const { fresh, nextState, counts } = selectNew(fetched, state);
+  log.info(`unique ${counts.unique}, already known ${counts.known}, new ${counts.fresh}`);
+
+  // --- filter ------------------------------------------------------------
+  let selected = filterSince(fresh, opts.since);
+  if (opts.since && selected.length !== fresh.length) {
+    log.info(`--since ${opts.since} dropped ${fresh.length - selected.length} of ${fresh.length}`);
+  }
+  selected = applyLimit(selected, opts.limit);
+
+  // --- persist -----------------------------------------------------------
+  // Written BEFORE ranking so that a ranker failure cannot cause the same jobs
+  // to be reported as new again tomorrow. --dry-run skips this entirely.
+  if (opts.dryRun) {
+    log.info('--dry-run: state not written');
+  } else {
+    await saveState(statePath, nextState);
+    log.info(`state written to ${statePath}`);
+  }
+
+  if (!selected.length) {
+    log.info('no new jobs');
+    return; // exit 0, printing nothing. Silence is a valid successful run.
+  }
+
+  // --- rank --------------------------------------------------------------
+  let ranks = null;
+  if (opts.noRank) {
+    log.info('--no-rank: skipping the ranking step');
+  } else {
+    const profile = await loadProfile(log);
+    try {
+      ranks = await rankJobs(selected, profile, { log });
+    } catch (err) {
+      // Belt and braces: rankJobs is documented not to throw, but a broken
+      // ranker must never lose the day's jobs.
+      log.error(`ranker failed: ${err.message}`);
+      ranks = null;
+    }
+  }
+
+  // --- print -------------------------------------------------------------
+  const digest = renderDigest(selected, ranks);
+  if (digest) process.stdout.write(`${digest}\n`);
+}
+
+async function loadCompanies(path, log) {
+  let text;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      log.warn(`no companies file at ${path}`);
+      return [];
+    }
+    throw err;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw new Error(`companies file at ${path} is not valid JSON: ${err.message}`);
+  }
+
+  const list = Array.isArray(parsed) ? parsed : parsed && parsed.companies;
+  if (!Array.isArray(list)) {
+    throw new Error(`companies file at ${path} must be an array, or an object with a "companies" array`);
+  }
+
+  return list.filter((c) => {
+    if (!c || !c.ats || !c.token) {
+      log.warn(`skipping companies entry without ats/token: ${JSON.stringify(c)}`);
+      return false;
+    }
+    try {
+      adapterFor(c.ats);
+    } catch (err) {
+      log.warn(`skipping ${c.name || c.token}: ${err.message}`);
+      return false;
+    }
+    return true;
+  });
+}
+
+async function loadProfile(log) {
+  const path = new URL('./profile.md', import.meta.url);
+  try {
+    return await readFile(path, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      log.warn('no profile.md found - ranking without a profile will be poor');
+      return '';
+    }
+    throw err;
+  }
+}

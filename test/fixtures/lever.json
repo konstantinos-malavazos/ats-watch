@@ -1,0 +1,52 @@
+[
+  {
+    "id": "lev-1001",
+    "text": "Staff Distributed Systems Engineer",
+    "categories": { "location": "Remote", "commitment": "Full-time", "team": "Platform" },
+    "hostedUrl": "https://jobs.lever.co/testco/lev-1001",
+    "applyUrl": "https://jobs.lever.co/testco/lev-1001/apply",
+    "createdAt": 1786352400000,
+    "descriptionPlain": "Build and operate our distributed systems platform. Fully remote team across time zones.",
+    "description": "<p>Build and operate our distributed systems platform. Fully remote team across time zones.</p>",
+    "workplaceType": "remote"
+  },
+  {
+    "id": "lev-1002",
+    "text": "Store Operations Manager",
+    "categories": { "location": "Chicago, IL", "commitment": "Full-time", "team": "Retail" },
+    "hostedUrl": "https://jobs.lever.co/testco/lev-1002",
+    "applyUrl": "https://jobs.lever.co/testco/lev-1002/apply",
+    "createdAt": 1786285200000,
+    "descriptionPlain": "Run day-to-day operations for our flagship Chicago store. On-site role, five days a week.",
+    "description": "<p>Run day-to-day operations for our flagship Chicago store. On-site role, five days a week.</p>",
+    "workplaceType": "onsite"
+  },
+  {
+    "id": "lev-1003",
+    "text": "Product Designer",
+    "hostedUrl": "https://jobs.lever.co/testco/lev-1003",
+    "applyUrl": "https://jobs.lever.co/testco/lev-1003/apply",
+    "createdAt": 1786186800000,
+    "description": "<p>Partner with PMs and engineers to design flows across the product.</p><ul><li>Own the design system</li><li>Run user research &amp; synthesize findings</li></ul>",
+    "workplaceType": "hybrid"
+  },
+  {
+    "id": "lev-1004",
+    "text": "Payroll Specialist",
+    "categories": { "location": "Remote - EU", "commitment": "Full-time", "team": "Finance" },
+    "applyUrl": "https://jobs.lever.co/testco/lev-1004/apply",
+    "createdAt": 1786121100000,
+    "descriptionPlain": "Process payroll for our EU entities and support quarterly audits. Remote within the EU.",
+    "workplaceType": "onsite"
+  },
+  {
+    "id": "lev-1005",
+    "text": "Warehouse Associate (Onsite Only)",
+    "categories": { "location": "Newark, NJ", "commitment": "Full-time", "team": "Logistics" },
+    "hostedUrl": "https://jobs.lever.co/testco/lev-1005",
+    "applyUrl": "https://jobs.lever.co/testco/lev-1005/apply",
+    "createdAt": 1786005000000,
+    "descriptionPlain": "Pick, pack, and ship customer orders from our Newark warehouse. Onsite only, no remote option.",
+    "workplaceType": "onsite"
+  }
+]
