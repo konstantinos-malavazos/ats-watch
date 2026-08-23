@@ -1,0 +1,28 @@
+name: Verify feeds
+
+# Manual only, never on push or pull_request. This job makes real requests to
+# other people's job boards, so it runs when a human asks for it and not on
+# every commit. Its purpose is to confirm the adapter field mappings, which
+# were written without ever seeing a live response.
+on:
+  workflow_dispatch:
+    inputs:
+      all:
+        description: 'Check every company (16 requests) instead of one per ATS (2)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify field mappings against live feeds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - name: Fetch and report schema coverage
+        run: node tools/verify-feeds.mjs ${{ inputs.all && '--all' || '' }}

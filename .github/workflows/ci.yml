@@ -73,12 +73,44 @@ jobs:
 
       # stdout is the product: a run with nothing to report must print
       # nothing at all and still exit 0.
+      #
+      # This deliberately points at an EMPTY companies file rather than the
+      # repo's real one. CI must never hit live ATS endpoints: it would make
+      # every pull request fire sixteen requests at other people's job boards,
+      # and the assertion would depend on whatever those boards happen to be
+      # advertising today. Use tools/verify-feeds.mjs for live checks.
       - name: Silence is a valid successful run
         run: |
+          echo '{"companies":[]}' > "$RUNNER_TEMP/empty-companies.json"
           set +e
-          out=$(./ats-watch 2>/dev/null)
+          out=$(./ats-watch \
+            --companies "$RUNNER_TEMP/empty-companies.json" \
+            --state "$RUNNER_TEMP/state.json" 2>/dev/null)
           code=$?
           set -e
           if [ "$code" -ne 0 ]; then echo "expected exit 0, got $code"; exit 1; fi
           if [ -n "$out" ]; then echo "expected empty stdout, got: $out"; exit 1; fi
+          test ! -e "$RUNNER_TEMP/state.json" || { echo "wrote state with nothing to report"; exit 1; }
           echo "empty run is silent and exits 0"
+
+      # The repo's real companies.json must stay loadable even though CI never
+      # fetches it: valid JSON, every entry keyed to an implemented adapter,
+      # no duplicate (ats, token) pairs. Offline, no network.
+      - name: companies.json is well-formed
+        run: |
+          node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            import { ADAPTERS } from "./lib/adapters/index.js";
+            const raw = JSON.parse(await readFile("companies.json", "utf8"));
+            const list = Array.isArray(raw) ? raw : raw.companies;
+            if (!Array.isArray(list)) throw new Error("companies.json has no companies array");
+            const seen = new Set();
+            for (const c of list) {
+              if (!c?.name || !c?.ats || !c?.token) throw new Error("incomplete entry: " + JSON.stringify(c));
+              if (!(c.ats in ADAPTERS)) throw new Error(c.name + " names unsupported ats " + c.ats);
+              const key = c.ats + ":" + c.token;
+              if (seen.has(key)) throw new Error("duplicate entry " + key);
+              seen.add(key);
+            }
+            console.log(list.length + " companies, all well-formed");
+          '

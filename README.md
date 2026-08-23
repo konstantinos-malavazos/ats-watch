@@ -102,7 +102,7 @@ stderr or the state file.
 
 | ATS | Endpoint | Status |
 |---|---|---|
-| Greenhouse | `https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true` | Implemented, field mapping **unverified** |
+| Greenhouse | `https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true` | Implemented; `title`, `location.name`, `absolute_url` and remote detection **confirmed against a live response**. `first_published` and `content` still unconfirmed. |
 | Lever | `https://api.lever.co/v0/postings/{site}?mode=json` | Implemented, field mapping **unverified** |
 | Ashby | — | **Not implemented** (endpoint could not be verified) |
 | Workable | — | **Not implemented** (endpoint could not be verified) |
@@ -126,7 +126,16 @@ authoring session.
    design — a failing source is reported on stderr and the run continues with
    the rest — so check stderr on your first run and prune whatever fails.
 
-2. **The Greenhouse and Lever field mappings are INFERRED.** The two endpoint
+2. **The field mappings are mostly still INFERRED.** A CI run on 2026-08-23
+   fetched the real Greenhouse boards and returned 2674 parsed jobs with
+   correct titles, locations and URLs, which confirms `title`, `location.name`
+   and `absolute_url`. Everything else — `first_published`, `content`, and the
+   whole Lever mapping — remains unconfirmed. Run
+   `node tools/verify-feeds.mjs` to check the rest; it reports per-field
+   coverage and flags any field that is empty on every row, which is the
+   signature of a wrong field name.
+
+   The original caveat, still true for what is not yet confirmed: the two endpoint
    URLs came from the project brief, but no live response was ever fetched, so
    the response field names (`absolute_url`, `first_published`, `hostedUrl`,
    `createdAt`, `workplaceType`, …) are unverified. The adapters are defensive
@@ -180,6 +189,21 @@ what makes that correct by construction.
 
 **`--since` keeps jobs with no `posted_at`.** We cannot prove such a job is old,
 and a job you never see is worse than a job you skim past.
+
+## Verifying the feeds
+
+```
+node tools/verify-feeds.mjs          # one board per ATS (2 requests)
+node tools/verify-feeds.mjs --all    # every company (16 requests)
+```
+
+Fetches live boards, parses them with the real adapters, and reports how much
+of the schema each source populates. A field empty on every row means its
+mapping is wrong; the script exits non-zero for that. There is also a manual
+`Verify feeds` GitHub Actions workflow that runs it on demand.
+
+CI itself never touches live ATS endpoints — that would fire sixteen requests
+at other people's job boards on every pull request.
 
 ## Tests
 
