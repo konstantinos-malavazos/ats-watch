@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { jobKey, jobId, normalise, isWellFormed, toIso, stripHtml, looksRemote } from '../lib/schema.js';
+import { jobKey, jobId, normalise, isWellFormed, toIso, stripHtml, looksRemote, formatSalary } from '../lib/schema.js';
 
 describe('jobKey / jobId stability', () => {
   const base = { ats: 'greenhouse', company_token: 'acme', ats_job_id: '42', title: 'Engineer', url: 'https://x', location: 'NYC' };
@@ -202,5 +202,43 @@ describe('looksRemote()', () => {
 
   test('plain office location is not remote', () => {
     assert.equal(looksRemote('Austin, TX'), false);
+  });
+});
+
+// Lever attaches a salaryRange to postings that state no salary at all, with
+// min and max both 0 (verified live against api.lever.co/v0/postings/ledger).
+// "Object present" therefore does not mean "salary stated".
+describe('formatSalary()', () => {
+  test('the all-zero placeholder renders as empty, not "AUD 0-0/yr"', () => {
+    assert.equal(formatSalary({ min: 0, max: 0, currency: 'AUD', interval: 'per-year-salary' }), '');
+  });
+
+  test('a stated range renders with currency, separators and interval', () => {
+    assert.equal(
+      formatSalary({ min: 75000, max: 95000, currency: 'eur', interval: 'per-year-salary' }),
+      'EUR 75,000-95,000/yr',
+    );
+  });
+
+  test('collapses a range whose ends are equal', () => {
+    assert.equal(formatSalary({ min: 80000, max: 80000, currency: 'GBP', interval: 'per-year-salary' }), 'GBP 80,000/yr');
+  });
+
+  test('renders when only one end is stated', () => {
+    assert.equal(formatSalary({ min: 0, max: 95000, currency: 'EUR', interval: 'per-year-salary' }), 'EUR 95,000/yr');
+  });
+
+  test('maps the non-yearly intervals', () => {
+    assert.equal(formatSalary({ min: 45, max: 60, currency: 'USD', interval: 'per-hour-salary' }), 'USD 45-60/hr');
+    assert.equal(formatSalary({ min: 6000, max: 7000, currency: 'EUR', interval: 'per-month-salary' }), 'EUR 6,000-7,000/mo');
+  });
+
+  test('degrades rather than throwing on unknown or missing parts', () => {
+    assert.equal(formatSalary({ min: 5000, max: 6000, currency: 'EUR', interval: 'mystery' }), 'EUR 5,000-6,000');
+    assert.equal(formatSalary({ min: 5000, max: 6000 }), '5,000-6,000');
+    assert.equal(formatSalary(null), '');
+    assert.equal(formatSalary(undefined), '');
+    assert.equal(formatSalary('nonsense'), '');
+    assert.equal(formatSalary({}), '');
   });
 });

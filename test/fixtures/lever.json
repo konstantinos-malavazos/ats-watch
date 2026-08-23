@@ -102,5 +102,39 @@
     "openingPlain": "We are hiring a backend engineer.",
     "descriptionBodyPlain": "You will own the ingest pipeline.",
     "additionalPlain": "Benefits include learning budget."
+  },
+  {
+    "id": "lev-1008",
+    "text": "Senior Platform Engineer",
+    "categories": {
+      "location": "Remote - EU"
+    },
+    "hostedUrl": "https://jobs.lever.co/testco/lev-1008",
+    "createdAt": 1755100000000,
+    "workplaceType": "remote",
+    "descriptionPlain": "Own the platform.",
+    "salaryRange": {
+      "min": 75000,
+      "max": 95000,
+      "currency": "EUR",
+      "interval": "per-year-salary"
+    }
+  },
+  {
+    "id": "lev-1009",
+    "text": "Placeholder Salary Role",
+    "categories": {
+      "location": "Sydney, Australia"
+    },
+    "hostedUrl": "https://jobs.lever.co/testco/lev-1009",
+    "createdAt": 1755200000000,
+    "workplaceType": "onsite",
+    "descriptionPlain": "No pay stated.",
+    "salaryRange": {
+      "min": 0,
+      "max": 0,
+      "currency": "AUD",
+      "interval": "per-year-salary"
+    }
   }
 ]

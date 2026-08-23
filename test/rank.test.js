@@ -1,12 +1,12 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRankingResponse, buildUserPrompt, rankJobs } from '../lib/rank.js';
+import { parseRankingResponse, buildUserPrompt, rankJobs, SYSTEM_PROMPT } from '../lib/rank.js';
 
 function makeJob(overrides = {}) {
   return {
     id: 'id1', ats: 'greenhouse', company: 'Acme', company_token: 'acme',
     ats_job_id: '1', title: 'Engineer', location: 'Austin, TX', remote: false,
-    url: 'https://x', posted_at: '2026-08-20T00:00:00Z', raw_description: 'desc',
+    url: 'https://x', posted_at: '2026-08-20T00:00:00Z', raw_description: 'desc', salary: '',
     ...overrides,
   };
 }
@@ -299,5 +299,22 @@ describe('rankJobs()', () => {
     });
     const all = [...log.warns, ...log.errors, ...log.infos].join(' ');
     assert.ok(!all.includes('sk-super-secret-value'));
+  });
+});
+
+describe('salary reaches the ranker', () => {
+  test('a stated salary is passed through to the prompt', () => {
+    const prompt = buildUserPrompt('profile', [makeJob({ id: 'a', salary: 'EUR 75,000-95,000/yr' })]);
+    assert.match(prompt, /EUR 75,000-95,000\/yr/);
+  });
+
+  test('an unstated salary is passed as null, not an empty string', () => {
+    const prompt = buildUserPrompt('profile', [makeJob({ id: 'a', salary: '' })]);
+    const postings = JSON.parse(prompt.slice(prompt.indexOf('['), prompt.lastIndexOf(']') + 1));
+    assert.equal(postings[0].salary, null);
+  });
+
+  test('the system prompt tells the model that null salary means unknown, not low', () => {
+    assert.match(SYSTEM_PROMPT, /null means unknown, NOT low/i);
   });
 });

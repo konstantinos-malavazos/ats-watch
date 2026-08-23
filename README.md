@@ -102,7 +102,7 @@ stderr or the state file.
 
 | ATS | Endpoint | Status |
 |---|---|---|
-| Greenhouse | `https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true` | Implemented; `title`, `location.name`, `absolute_url` and remote detection **confirmed against a live response**. `first_published` and `content` still unconfirmed. |
+| Greenhouse | `https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true` | Implemented, **confirmed against a live response**. No pay field exists in the response, so `salary` is always empty. |
 | Lever | `https://api.lever.co/v0/postings/{site}?mode=json` | Implemented, **confirmed against a live response** |
 | Ashby | — | **Not implemented** (endpoint could not be verified) |
 | Workable | — | **Not implemented** (endpoint could not be verified) |
@@ -183,6 +183,13 @@ jobs to be reported as new again tomorrow. `--dry-run` skips the write entirely;
 `selectNew()` is pure and returns the next state rather than mutating, which is
 what makes that correct by construction.
 
+**Salary is only shown when the feed actually states it.** Lever attaches a
+`salaryRange` object to postings that state no pay at all, with `min` and `max`
+both `0`; that renders as nothing rather than `AUD 0-0/yr`. Greenhouse returns
+no pay field at all in the responses observed, so Greenhouse jobs never carry a
+salary. The ranker receives `null` for an unstated salary and is told that null
+means unknown, not low.
+
 **`--since` keeps jobs with no `posted_at`.** We cannot prove such a job is old,
 and a job you never see is worse than a job you skim past.
 
@@ -191,6 +198,7 @@ and a job you never see is worse than a job you skim past.
 ```
 node tools/verify-feeds.mjs          # one board per ATS (2 requests)
 node tools/verify-feeds.mjs --all    # every company (16 requests)
+node tools/verify-feeds.mjs --dump   # print a raw posting, for adding a mapping
 ```
 
 Fetches live boards, parses them with the real adapters, and reports how much
