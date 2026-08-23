@@ -21,7 +21,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { adapterFor } from '../lib/adapters/index.js';
-import { politeSequential } from '../lib/http.js';
+import { politeSequential, getJson } from '../lib/http.js';
 import { makeLogger } from '../lib/log.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -46,8 +46,10 @@ const report = [];
 const { failures } = await politeSequential(
   targets,
   async (company) => {
-    const jobs = await adapterFor(company.ats).fetchJobs(company, { log, timeoutMs: 30000 });
-    report.push({ company, jobs });
+    const adapter = adapterFor(company.ats);
+    const payload = await getJson(adapter.buildUrl(company.token), { log, timeoutMs: 30000 });
+    const jobs = adapter.parse(payload, company);
+    report.push({ company, jobs, payload });
     return jobs;
   },
   { delayMs: 1000, log },
@@ -55,7 +57,7 @@ const { failures } = await politeSequential(
 
 let problems = 0;
 
-for (const { company, jobs } of report) {
+for (const { company, jobs, payload } of report) {
   console.log(`\n${company.name} (${company.ats}:${company.token}) - ${jobs.length} jobs`);
   if (!jobs.length) {
     console.log('  EMPTY: the board returned no jobs. Wrong token, or the board is genuinely empty.');
@@ -63,14 +65,31 @@ for (const { company, jobs } of report) {
     continue;
   }
 
+  const emptyFields = [];
   for (const field of CHECKED) {
     const filled = jobs.filter((j) => j[field] !== null && j[field] !== '').length;
+    if (filled === 0) emptyFields.push(field);
     const pct = Math.round((filled / jobs.length) * 100);
     const verdict = filled === 0 ? '  <-- ALWAYS EMPTY, the mapping for this field is probably wrong' : '';
     console.log(`  ${field.padEnd(16)} ${String(pct).padStart(3)}% populated (${filled}/${jobs.length})${verdict}`);
     if (filled === 0) problems++;
   }
   console.log(`  ${'remote'.padEnd(16)} ${jobs.filter((j) => j.remote).length} flagged remote`);
+
+  if (emptyFields.length) {
+    // The two payload shapes we support: Greenhouse wraps in {jobs:[...]},
+    // Lever returns a bare array. This is a diagnostic, so handle both here
+    // rather than widening the adapter contract for it.
+    const first = Array.isArray(payload) ? payload[0] : payload?.jobs?.[0];
+    if (first && typeof first === 'object') {
+      console.log(`  the provider's own top-level keys, for fixing ${emptyFields.join(', ')}:`);
+      for (const [k, v] of Object.entries(first)) {
+        const t = v === null ? 'null' : Array.isArray(v) ? `array[${v.length}]` : typeof v;
+        const peek = typeof v === 'string' ? ` ${JSON.stringify(v.slice(0, 60))}` : '';
+        console.log(`    ${k.padEnd(22)} ${t}${peek}`);
+      }
+    }
+  }
 
   const s = jobs[0];
   console.log('  sample:');
