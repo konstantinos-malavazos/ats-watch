@@ -171,7 +171,7 @@ async function loadProfile(log) {
     return await readFile(path, 'utf8');
   } catch (err) {
     if (err.code === 'ENOENT') {
-      log.warn('no profile.md found - ranking without a profile will be poor');
+      log.warn('no profile.md found - copy profile.example.md to profile.md and fill it in; ranking without a profile will be poor');
       return '';
     }
     throw err;

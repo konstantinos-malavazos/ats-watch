@@ -60,7 +60,17 @@ Exit codes: `0` success (including no news), `1` the run could not complete,
 site slug (Lever) that appears in the feed URL.
 
 `profile.md` — your background and what you want, sent verbatim to the ranker.
-It ships as a template with `TODO`s; fill it in before ranking is worth much.
+
+**It is deliberately gitignored**, because a useful profile contains your
+employment history and salary expectations and none of that belongs in a
+repository. The repo tracks `profile.example.md` instead:
+
+```
+cp profile.example.md profile.md   # then fill it in; it stays local
+```
+
+Without a `profile.md` the tool still runs — it warns on stderr and ranks
+against an empty profile, which is to say badly.
 
 ### Ranker
 

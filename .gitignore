@@ -2,3 +2,7 @@
 .ats-watch-state.json
 .ats-watch-state.json.tmp-*
 node_modules/
+
+# Your real profile: contains employment history and salary. Never commit it.
+# Copy profile.example.md to profile.md and fill it in locally.
+profile.md
