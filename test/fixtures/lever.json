@@ -2,7 +2,11 @@
   {
     "id": "lev-1001",
     "text": "Staff Distributed Systems Engineer",
-    "categories": { "location": "Remote", "commitment": "Full-time", "team": "Platform" },
+    "categories": {
+      "location": "Remote",
+      "commitment": "Full-time",
+      "team": "Platform"
+    },
     "hostedUrl": "https://jobs.lever.co/testco/lev-1001",
     "applyUrl": "https://jobs.lever.co/testco/lev-1001/apply",
     "createdAt": 1786352400000,
@@ -13,7 +17,11 @@
   {
     "id": "lev-1002",
     "text": "Store Operations Manager",
-    "categories": { "location": "Chicago, IL", "commitment": "Full-time", "team": "Retail" },
+    "categories": {
+      "location": "Chicago, IL",
+      "commitment": "Full-time",
+      "team": "Retail"
+    },
     "hostedUrl": "https://jobs.lever.co/testco/lev-1002",
     "applyUrl": "https://jobs.lever.co/testco/lev-1002/apply",
     "createdAt": 1786285200000,
@@ -33,7 +41,11 @@
   {
     "id": "lev-1004",
     "text": "Payroll Specialist",
-    "categories": { "location": "Remote - EU", "commitment": "Full-time", "team": "Finance" },
+    "categories": {
+      "location": "Remote - EU",
+      "commitment": "Full-time",
+      "team": "Finance"
+    },
     "applyUrl": "https://jobs.lever.co/testco/lev-1004/apply",
     "createdAt": 1786121100000,
     "descriptionPlain": "Process payroll for our EU entities and support quarterly audits. Remote within the EU.",
@@ -42,11 +54,53 @@
   {
     "id": "lev-1005",
     "text": "Warehouse Associate (Onsite Only)",
-    "categories": { "location": "Newark, NJ", "commitment": "Full-time", "team": "Logistics" },
+    "categories": {
+      "location": "Newark, NJ",
+      "commitment": "Full-time",
+      "team": "Logistics"
+    },
     "hostedUrl": "https://jobs.lever.co/testco/lev-1005",
     "applyUrl": "https://jobs.lever.co/testco/lev-1005/apply",
     "createdAt": 1786005000000,
     "descriptionPlain": "Pick, pack, and ship customer orders from our Newark warehouse. Onsite only, no remote option.",
     "workplaceType": "onsite"
+  },
+  {
+    "id": "lev-1006",
+    "text": "Local Market Outreach - Australia",
+    "categories": {
+      "location": "Sydney, Australia",
+      "commitment": "Full-time"
+    },
+    "hostedUrl": "https://jobs.lever.co/testco/lev-1006",
+    "applyUrl": "https://jobs.lever.co/testco/lev-1006/apply",
+    "createdAt": 1746452423978,
+    "workplaceType": "remote",
+    "country": "AU",
+    "description": "",
+    "descriptionPlain": "",
+    "opening": "",
+    "openingPlain": "",
+    "descriptionBody": "",
+    "descriptionBodyPlain": "",
+    "additional": "",
+    "additionalPlain": "",
+    "salaryDescription": "<div>Since 2014 we have been building the secure gateway.</div>",
+    "salaryDescriptionPlain": "Since 2014 we have been building the secure gateway."
+  },
+  {
+    "id": "lev-1007",
+    "text": "Staff Backend Engineer",
+    "categories": {
+      "location": "Remote - EU"
+    },
+    "hostedUrl": "https://jobs.lever.co/testco/lev-1007",
+    "createdAt": 1755000000000,
+    "workplaceType": "remote",
+    "description": "",
+    "descriptionPlain": "",
+    "openingPlain": "We are hiring a backend engineer.",
+    "descriptionBodyPlain": "You will own the ingest pipeline.",
+    "additionalPlain": "Benefits include learning budget."
   }
 ]

@@ -147,3 +147,41 @@ describe('lever adapter', () => {
     }
   });
 });
+
+// Regression: Lever leaves description/descriptionPlain empty on many postings
+// and puts the prose in one of its other five text fields. Reading description
+// alone produced an empty raw_description on every row of a real board
+// (api.lever.co/v0/postings/ledger, verified 2026-08-23).
+describe('lever description collection', () => {
+  const company = { name: 'Test Co', ats: 'lever', token: 'testco' };
+  const rows = lever.parse(loadFixture('lever.json'), company);
+
+  test('falls back to salaryDescriptionPlain when description is empty', () => {
+    const row = rows.find((r) => r.ats_job_id === 'lev-1006');
+    assert.ok(row, 'fixture row lev-1006 should parse');
+    assert.equal(row.raw_description, 'Since 2014 we have been building the secure gateway.');
+  });
+
+  test('assembles opening + body + additional when description is empty', () => {
+    const row = rows.find((r) => r.ats_job_id === 'lev-1007');
+    assert.ok(row);
+    assert.match(row.raw_description, /We are hiring a backend engineer\./);
+    assert.match(row.raw_description, /You will own the ingest pipeline\./);
+    assert.match(row.raw_description, /Benefits include learning budget\./);
+  });
+
+  test('no row on the fixture board has an empty description', () => {
+    const empty = rows.filter((r) => !r.raw_description);
+    assert.equal(empty.length, 0, `rows with empty description: ${empty.map((r) => r.ats_job_id)}`);
+  });
+
+  test('does not duplicate text already covered by description', () => {
+    const out = lever.parse([{
+      id: 'dup', text: 'Role', categories: { location: 'X' },
+      hostedUrl: 'https://x', createdAt: 1755000000000,
+      descriptionPlain: 'Alpha beta gamma.',
+      openingPlain: 'Alpha beta gamma.',
+    }], company);
+    assert.equal(out[0].raw_description, 'Alpha beta gamma.');
+  });
+});
