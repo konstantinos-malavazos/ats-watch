@@ -185,3 +185,37 @@ describe('lever description collection', () => {
     assert.equal(out[0].raw_description, 'Alpha beta gamma.');
   });
 });
+
+describe('salary mapping', () => {
+  const leverCompany = { name: 'Test Co', ats: 'lever', token: 'testco' };
+  const leverRows = lever.parse(loadFixture('lever.json'), leverCompany);
+
+  test('lever maps a stated salaryRange', () => {
+    const row = leverRows.find((r) => r.ats_job_id === 'lev-1008');
+    assert.ok(row);
+    assert.equal(row.salary, 'EUR 75,000-95,000/yr');
+  });
+
+  test('lever renders the all-zero placeholder as empty', () => {
+    const row = leverRows.find((r) => r.ats_job_id === 'lev-1009');
+    assert.ok(row);
+    assert.equal(row.salary, '');
+  });
+
+  test('lever leaves salary empty when there is no salaryRange at all', () => {
+    const row = leverRows.find((r) => r.ats_job_id === 'lev-1001');
+    assert.ok(row);
+    assert.equal(row.salary, '');
+  });
+
+  test('greenhouse leaves salary empty: the live response carries no pay field', () => {
+    const rows = greenhouse.parse(loadFixture('greenhouse.json'), COMPANY);
+    assert.ok(rows.length > 0);
+    assert.ok(rows.every((r) => r.salary === ''));
+  });
+
+  test('salary is part of the schema on every row', () => {
+    assert.ok(leverRows.every((r) => typeof r.salary === 'string'));
+    assert.ok(leverRows.every((r) => isWellFormed(r)));
+  });
+});

@@ -98,3 +98,46 @@ describe('renderDigest()', () => {
     assert.ok(out.startsWith('2 new roles\n'));
   });
 });
+
+describe('salary in the digest', () => {
+  const job = (over = {}) => ({
+    id: 'a', ats: 'lever', company: 'Acme', company_token: 'acme', ats_job_id: '1',
+    title: 'Engineer', location: 'Remote - EU', remote: true,
+    url: 'https://x', posted_at: null, raw_description: '', salary: '', ...over,
+  });
+
+  test('prints the salary on its own line when stated', () => {
+    const out = renderDigest([job({ salary: 'EUR 75,000-95,000/yr' })], null);
+    assert.ok(out.includes('\n  EUR 75,000-95,000/yr\n'), out);
+  });
+
+  test('prints no salary line when the posting states none', () => {
+    const out = renderDigest([job({ salary: '' })], null);
+    assert.ok(!/\n {2}[A-Z]{3} /.test(out), out);
+    assert.equal(out.split('\n').filter(Boolean).length, 3); // header, title, url
+  });
+
+  test('never prints a zero range', () => {
+    const out = renderDigest([job({ salary: '' }), job({ id: 'b', salary: '' })], null);
+    assert.ok(!out.includes('0-0'), out);
+  });
+
+  test('salary sits above the rationale, below the title', () => {
+    const ranks = new Map([['a', { score: 8, rationale: 'good fit', red_flags: [] }]]);
+    const lines = renderDigest([job({ salary: 'EUR 90,000/yr' })], ranks).split('\n');
+    const t = lines.findIndex((l) => l.includes('Engineer'));
+    const s = lines.findIndex((l) => l.includes('EUR 90,000/yr'));
+    const r = lines.findIndex((l) => l.includes('good fit'));
+    assert.ok(t < s && s < r, lines.join('|'));
+  });
+
+  test('the budget still holds when every job states a salary', () => {
+    const jobs = Array.from({ length: 60 }, (_, i) => job({
+      id: `j${i}`, title: `Senior Staff Platform Engineer Number ${i}`,
+      salary: 'EUR 120,000-160,000/yr',
+    }));
+    const out = renderDigest(jobs, null);
+    assert.ok(out.length <= BUDGET, `digest was ${out.length} chars`);
+    assert.ok(!/\x1b\[/.test(out));
+  });
+});
