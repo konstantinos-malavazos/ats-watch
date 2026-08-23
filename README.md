@@ -186,6 +186,12 @@ new jobs, using the real parsed fixtures from both adapters.
 Note: `node --test test/` fails on this Node build (it treats the directory as
 the entry module). Use `npm test`, which runs `node --test "test/*.test.js"`.
 
+CI (`.github/workflows/ci.yml`) runs the suite on Node 22.x and 24.x, and
+separately asserts the three hard constraints that are easy to regress
+silently: no declared dependencies and no lockfile, an executable entry point
+with its shebang that runs both bare-path and via `node`, and a run with
+nothing to report printing nothing while exiting 0.
+
 ## Out of scope
 
 Discord delivery, cron scheduling, deployment. Phase 2.

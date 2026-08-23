@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.x is the floor declared in package.json engines; 24.x guards
+        # against drift on the version the README's node:sqlite reasoning
+        # refers to.
+        node: ['22.x', '24.x']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # No install step on purpose: this project has zero dependencies, so
+      # there is nothing to install and no lockfile to cache.
+      - name: Run tests
+        run: npm test
+
+  constraints:
+    name: hard constraints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      # The zero-dependency rule is a hard requirement (the tool runs in a
+      # container whose writable layer is ephemeral, so nothing can be
+      # installed at runtime). Catch a stray `npm install --save` in review
+      # rather than at 3am in cron.
+      - name: No runtime or dev dependencies
+        run: |
+          node -e '
+            const p = require("./package.json");
+            const bad = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]
+              .filter((k) => p[k] && Object.keys(p[k]).length > 0);
+            if (bad.length) {
+              console.error("package.json declares " + bad.join(", ") + "; this project must stay dependency-free");
+              process.exit(1);
+            }
+            console.log("zero dependencies confirmed");
+          '
+          if [ -e package-lock.json ]; then
+            echo "package-lock.json exists, which means something got installed"
+            exit 1
+          fi
+
+      # The entry point must keep its shebang and stay runnable both
+      # bare-path and via `node`.
+      - name: Entry point is executable and runs both ways
+        run: |
+          test -x ats-watch || { echo "ats-watch is not executable"; exit 1; }
+          head -1 ats-watch | grep -qx '#!/usr/bin/env node' \
+            || { echo "ats-watch is missing its shebang"; exit 1; }
+          ./ats-watch --help > /dev/null
+          node ./ats-watch --help > /dev/null
+          echo "entry point OK"
+
+      # stdout is the product: a run with nothing to report must print
+      # nothing at all and still exit 0.
+      - name: Silence is a valid successful run
+        run: |
+          set +e
+          out=$(./ats-watch 2>/dev/null)
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then echo "expected exit 0, got $code"; exit 1; fi
+          if [ -n "$out" ]; then echo "expected empty stdout, got: $out"; exit 1; fi
+          echo "empty run is silent and exits 0"
