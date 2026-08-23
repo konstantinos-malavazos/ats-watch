@@ -16,6 +16,7 @@
 //
 //   node tools/verify-feeds.mjs
 //   node tools/verify-feeds.mjs --all
+//   node tools/verify-feeds.mjs --dump    # print one raw posting, for adding a mapping
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +30,7 @@ const CHECKED = ['url', 'location', 'posted_at', 'raw_description'];
 
 const log = makeLogger();
 const all = process.argv.includes('--all');
+const dump = process.argv.includes('--dump');
 
 const raw = JSON.parse(await readFile(path.join(ROOT, 'companies.json'), 'utf8'));
 const list = (Array.isArray(raw) ? raw : raw.companies) ?? [];
@@ -91,6 +93,15 @@ for (const { company, jobs, payload } of report) {
     }
   }
 
+  if (dump) {
+    // Adding a mapping for a field we do not yet read means knowing its real
+    // shape. Nested objects are where that bites: the coverage report can say
+    // "object" without saying what is inside.
+    const first = Array.isArray(payload) ? payload[0] : payload?.jobs?.[0];
+    console.log('  raw posting (truncated):');
+    console.log(indent(JSON.stringify(first, replacer, 2), 4));
+  }
+
   const s = jobs[0];
   console.log('  sample:');
   console.log(`    title       ${s.title}`);
@@ -98,6 +109,18 @@ for (const { company, jobs, payload } of report) {
   console.log(`    url         ${s.url}`);
   console.log(`    posted_at   ${s.posted_at}`);
   console.log(`    description ${JSON.stringify(s.raw_description.slice(0, 100))}...`);
+}
+
+function replacer(key, value) {
+  // Long prose would bury the structure we came to read.
+  return typeof value === 'string' && value.length > 120
+    ? `${value.slice(0, 120)}...[${value.length} chars]`
+    : value;
+}
+
+function indent(text, n) {
+  const pad = ' '.repeat(n);
+  return text.split('\n').map((l) => pad + l).join('\n');
 }
 
 console.log('');

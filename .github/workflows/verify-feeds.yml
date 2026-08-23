@@ -11,6 +11,10 @@ on:
         description: 'Check every company (16 requests) instead of one per ATS (2)'
         type: boolean
         default: false
+      dump:
+        description: 'Print one raw posting per source, for adding a new field mapping'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,4 +29,4 @@ jobs:
         with:
           node-version: '22.x'
       - name: Fetch and report schema coverage
-        run: node tools/verify-feeds.mjs ${{ inputs.all && '--all' || '' }}
+        run: node tools/verify-feeds.mjs ${{ inputs.all && '--all' || '' }} ${{ inputs.dump && '--dump' || '' }}
