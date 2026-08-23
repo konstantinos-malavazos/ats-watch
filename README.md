@@ -11,7 +11,7 @@ Personal use only. No auth, no scraping of logged-in sites, no republishing.
 Phase 1. The full fetch → normalise → dedupe → persist → first-seen → filter →
 rank → print pipeline is implemented and tested offline (131 tests). Two things
 are still open, both blocked on the authoring environment rather than on design
-— see **Known gaps**: no seed companies, and the ATS field mappings are
+— see **Known gaps**: the seed companies and the ATS field mappings are both
 unverified.
 
 ## Requirements
@@ -119,11 +119,12 @@ source never aborts the run** — it degrades and reports the failure on stderr.
 These are honest gaps, not oversights. Each is blocked on something outside the
 authoring session.
 
-1. **No seed companies.** `companies.json` ships empty. The environment this
-   was built in had every ATS host blocked by its network egress policy, so no
-   board token could be confirmed to return 200 with jobs. Inventing plausible
-   tokens would have produced a list that 404s on first run. Add your own and
-   verify each with the `curl` one-liners in `companies.json`.
+1. **The 16 seed companies are UNVERIFIED.** They were supplied by the project
+   owner rather than invented, but every ATS host was blocked by the authoring
+   environment's egress policy, so not one could be confirmed to return 200
+   with jobs. Expect some to 404 on the first real run. That is survivable by
+   design — a failing source is reported on stderr and the run continues with
+   the rest — so check stderr on your first run and prune whatever fails.
 
 2. **The Greenhouse and Lever field mappings are INFERRED.** The two endpoint
    URLs came from the project brief, but no live response was ever fetched, so

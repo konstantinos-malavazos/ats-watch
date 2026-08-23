@@ -1,21 +1,20 @@
 {
-  "_comment": [
-    "Companies to watch. Each entry: { name, ats, token }.",
-    "  name  - display name, used in the digest",
-    "  ats   - one of the implemented adapters: 'greenhouse' | 'lever'",
-    "  token - the board token (Greenhouse) or site slug (Lever) in the feed URL",
-    "",
-    "This list ships EMPTY on purpose. The session that built this tool had all",
-    "ATS hosts blocked by its network egress policy, so no board token could be",
-    "confirmed to return 200 with jobs. Rather than ship invented tokens that",
-    "would 404 on your first run, the list is left for you to fill in.",
-    "",
-    "To add one, confirm it yourself first:",
-    "  curl -s -o /dev/null -w '%{http_code}\\n' \\",
-    "    'https://boards-api.greenhouse.io/v1/boards/<token>/jobs?content=true'",
-    "  curl -s -o /dev/null -w '%{http_code}\\n' \\",
-    "    'https://api.lever.co/v0/postings/<site>?mode=json'",
-    "Both should print 200 and the body should contain postings."
-  ],
-  "companies": []
+  "companies": [
+    { "name": "GitLab",       "ats": "greenhouse", "token": "gitlab" },
+    { "name": "Datadog",      "ats": "greenhouse", "token": "datadog" },
+    { "name": "Cloudflare",   "ats": "greenhouse", "token": "cloudflare" },
+    { "name": "Grafana Labs", "ats": "greenhouse", "token": "grafanalabs" },
+    { "name": "Elastic",      "ats": "greenhouse", "token": "elastic" },
+    { "name": "Stripe",       "ats": "greenhouse", "token": "stripe" },
+    { "name": "Vercel",       "ats": "greenhouse", "token": "vercel" },
+    { "name": "Remote.com",   "ats": "greenhouse", "token": "remotecom" },
+    { "name": "Doximity",     "ats": "greenhouse", "token": "doximity" },
+    { "name": "Adyen",        "ats": "greenhouse", "token": "adyen" },
+    { "name": "N26",          "ats": "greenhouse", "token": "n26" },
+    { "name": "Monzo",        "ats": "greenhouse", "token": "monzo" },
+    { "name": "Wise",         "ats": "greenhouse", "token": "wise" },
+    { "name": "Matillion",    "ats": "lever",      "token": "matillion" },
+    { "name": "Swile",        "ats": "lever",      "token": "swile" },
+    { "name": "Ledger",       "ats": "lever",      "token": "ledger" }
+  ]
 }
