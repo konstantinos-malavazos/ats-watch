@@ -1,0 +1,49 @@
+{
+  "_fixture_note": "SYNTHETIC - hand-built to the inferred response shape on 2026-08-23. NOT a recorded live response; ATS egress was blocked in the authoring environment. Re-record against the real endpoint before trusting field coverage.",
+  "jobs": [
+    {
+      "id": 5001,
+      "title": "Senior Platform Engineer",
+      "location": { "name": "Remote - United States" },
+      "absolute_url": "https://boards.greenhouse.io/testco/jobs/5001",
+      "updated_at": "2026-08-09T08:00:00Z",
+      "first_published": "2026-08-08T15:30:00Z",
+      "content": "&amp;lt;p&amp;gt;Join our platform team building &amp;lt;strong&amp;gt;distributed&amp;lt;/strong&amp;gt; systems. This role is remote-friendly &amp;amp;amp; collaborative.&amp;lt;/p&amp;gt;&amp;lt;ul&amp;gt;&amp;lt;li&amp;gt;Design APIs&amp;lt;/li&amp;gt;&amp;lt;li&amp;gt;Own reliability&amp;lt;/li&amp;gt;&amp;lt;/ul&amp;gt;"
+    },
+    {
+      "id": 5002,
+      "title": "Front Desk Receptionist",
+      "location": { "name": "Austin, TX" },
+      "absolute_url": "https://boards.greenhouse.io/testco/jobs/5002",
+      "updated_at": "2026-08-07T10:00:00Z",
+      "first_published": "2026-08-06T09:15:00Z",
+      "content": "&amp;lt;p&amp;gt;We need a receptionist to greet guests and manage the front desk.&amp;lt;/p&amp;gt;"
+    },
+    {
+      "id": 5003,
+      "title": "Support Specialist",
+      "location": null,
+      "absolute_url": "https://boards.greenhouse.io/testco/jobs/5003",
+      "updated_at": "2026-08-05T18:45:00Z",
+      "content": "&amp;lt;p&amp;gt;Support customers via chat and email, triage bugs, and escalate to engineering.&amp;lt;/p&amp;gt;"
+    },
+    {
+      "id": 5004,
+      "title": "",
+      "location": { "name": "Denver, CO" },
+      "absolute_url": "https://boards.greenhouse.io/testco/jobs/5004",
+      "updated_at": "2026-08-04T12:00:00Z",
+      "first_published": "2026-08-03T12:00:00Z",
+      "content": "&amp;lt;p&amp;gt;This row is missing a title and normalise() should drop it.&amp;lt;/p&amp;gt;"
+    },
+    {
+      "id": 5005,
+      "title": "Retail Operations Lead",
+      "location": { "name": "Austin, TX (onsite only)" },
+      "absolute_url": "https://boards.greenhouse.io/testco/jobs/5005",
+      "updated_at": "2026-08-02T11:00:00Z",
+      "first_published": "2026-08-01T11:00:00Z",
+      "content": "&amp;lt;p&amp;gt;Own our Austin retail ops &amp;amp;amp; team, working closely with store managers.&amp;lt;/p&amp;gt;"
+    }
+  ]
+}

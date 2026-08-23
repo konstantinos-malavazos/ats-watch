@@ -1,0 +1,20 @@
+{
+  "companies": [
+    { "name": "GitLab",       "ats": "greenhouse", "token": "gitlab" },
+    { "name": "Datadog",      "ats": "greenhouse", "token": "datadog" },
+    { "name": "Cloudflare",   "ats": "greenhouse", "token": "cloudflare" },
+    { "name": "Grafana Labs", "ats": "greenhouse", "token": "grafanalabs" },
+    { "name": "Elastic",      "ats": "greenhouse", "token": "elastic" },
+    { "name": "Stripe",       "ats": "greenhouse", "token": "stripe" },
+    { "name": "Vercel",       "ats": "greenhouse", "token": "vercel" },
+    { "name": "Remote.com",   "ats": "greenhouse", "token": "remotecom" },
+    { "name": "Doximity",     "ats": "greenhouse", "token": "doximity" },
+    { "name": "Adyen",        "ats": "greenhouse", "token": "adyen" },
+    { "name": "N26",          "ats": "greenhouse", "token": "n26" },
+    { "name": "Monzo",        "ats": "greenhouse", "token": "monzo" },
+    { "name": "Wise",         "ats": "greenhouse", "token": "wise" },
+    { "name": "Matillion",    "ats": "lever",      "token": "matillion" },
+    { "name": "Swile",        "ats": "lever",      "token": "swile" },
+    { "name": "Ledger",       "ats": "lever",      "token": "ledger" }
+  ]
+}
