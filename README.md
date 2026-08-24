@@ -10,7 +10,7 @@ Personal use only. No auth, no scraping of logged-in sites, no republishing.
 
 Phase 1, and the pipeline now runs end to end for real. fetch → normalise →
 dedupe → persist → first-seen → filter → rank → print is implemented, covered
-by 181 offline tests, and **confirmed against live ATS feeds and a live ranked
+by 185 offline tests, and **confirmed against live ATS feeds and a live ranked
 run** (2026-08-24: 2,643 postings from 15 boards, scored by deepseek-v4-pro).
 The remaining open item is the seed company list — see **Known gaps**.
 
@@ -230,6 +230,18 @@ no pay field at all in the responses observed, so Greenhouse jobs never carry a
 salary. The ranker receives `null` for an unstated salary and is told that null
 means unknown, not low.
 
+**Remote detection is evidence-led.** `looksRemote()` matches a deliberately
+short list of phrasings. "home based" is on it because a scan of all 3342
+postings across the configured boards found it was the only remote-sounding
+phrasing being missed, on 271 rows: Canonical writes every remote role as
+"Home based - EMEA" and never uses the word "remote", so 297 of its 303
+fully-remote postings were reaching the ranker looking on-site. Widening the
+pattern moved the corpus from 1031 to 1302 remote-flagged roles with no new
+false positives. Words like "virtual" and "flexible" are deliberately absent —
+they misfire ("Virtual Reality Engineer") and no live posting needed them. If
+you add a board whose remote roles are being missed, re-run that scan rather
+than guessing at a phrase.
+
 **`--since` keeps jobs with no `posted_at`.** We cannot prove such a job is old,
 and a job you never see is worse than a job you skim past.
 
@@ -255,7 +267,7 @@ at other people's job boards on every pull request.
 npm test
 ```
 
-181 tests, entirely offline — the adapters are tested against fixtures in
+185 tests, entirely offline — the adapters are tested against fixtures in
 `test/fixtures/`, and the ranker against an injected `fetchImpl`. No test makes
 a network request.
 
