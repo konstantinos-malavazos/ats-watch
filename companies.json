@@ -74,6 +74,56 @@
       "name": "Ledger",
       "ats": "lever",
       "token": "ledger"
+    },
+    {
+      "name": "Canonical",
+      "ats": "greenhouse",
+      "token": "canonical"
+    },
+    {
+      "name": "GetYourGuide",
+      "ats": "greenhouse",
+      "token": "getyourguide"
+    },
+    {
+      "name": "Typeform",
+      "ats": "greenhouse",
+      "token": "typeform"
+    },
+    {
+      "name": "Contentful",
+      "ats": "greenhouse",
+      "token": "contentful"
+    },
+    {
+      "name": "SonarSource",
+      "ats": "lever",
+      "token": "sonarsource"
+    },
+    {
+      "name": "n8n",
+      "ats": "ashby",
+      "token": "n8n"
+    },
+    {
+      "name": "Supabase",
+      "ats": "ashby",
+      "token": "supabase"
+    },
+    {
+      "name": "Synthesia",
+      "ats": "ashby",
+      "token": "synthesia"
+    },
+    {
+      "name": "PostHog",
+      "ats": "ashby",
+      "token": "posthog"
+    },
+    {
+      "name": "Qonto",
+      "ats": "ashby",
+      "token": "qonto"
     }
   ]
 }
