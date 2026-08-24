@@ -113,7 +113,7 @@ describe('buildUserPrompt()', () => {
 
 describe('rankJobs()', () => {
   const KEY_VARS = ['ATS_WATCH_LLM_API_KEY', 'DEEPSEEK_API_KEY'];
-  const CFG_VARS = ['ATS_WATCH_LLM_BASE_URL', 'ATS_WATCH_LLM_MODEL'];
+  const CFG_VARS = ['ATS_WATCH_LLM_BASE_URL', 'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS', 'ATS_WATCH_LLM_TIMEOUT_MS'];
   let saved;
 
   beforeEach(() => {
@@ -217,6 +217,69 @@ describe('rankJobs()', () => {
     });
     assert.ok(result instanceof Map);
     assert.equal(seenInit.headers.authorization, 'Bearer sk-fallback');
+  });
+
+  // deepseek-v4-pro is a reasoning model: hidden reasoning tokens are drawn
+  // from max_tokens before any content is emitted. A budget sized only for the
+  // answer gets spent entirely on reasoning and returns empty content - which
+  // is exactly what the first real run against the live API did.
+  test('token budget leaves headroom for reasoning tokens', async () => {
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    let seenInit;
+    await rankJobs(jobs, 'p', {
+      log: makeLog(),
+      fetchImpl: async (_u, init) => { seenInit = init; return reply(goodBody); },
+    });
+    const { max_tokens } = JSON.parse(seenInit.body);
+    // Measured live: a 5-job prompt burnt ~750-1020 reasoning tokens alone.
+    assert.ok(max_tokens >= 2560, `budget ${max_tokens} leaves no reasoning headroom`);
+  });
+
+  test('ATS_WATCH_LLM_MAX_TOKENS overrides the computed budget', async () => {
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.ATS_WATCH_LLM_MAX_TOKENS = '1234';
+    let seenInit;
+    await rankJobs(jobs, 'p', {
+      log: makeLog(),
+      fetchImpl: async (_u, init) => { seenInit = init; return reply(goodBody); },
+    });
+    assert.equal(JSON.parse(seenInit.body).max_tokens, 1234);
+  });
+
+  // The first real 23-job run took 2m37s: a reasoning model on a large batch
+  // blows straight through a one-minute timeout.
+  test('timeout is generous by default and env-overridable', async () => {
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    let seenSignal;
+    await rankJobs(jobs, 'p', {
+      log: makeLog(),
+      fetchImpl: async (_u, init) => { seenSignal = init.signal; return reply(goodBody); },
+    });
+    assert.ok(seenSignal instanceof AbortSignal);
+
+    process.env.ATS_WATCH_LLM_TIMEOUT_MS = '1';
+    const log = makeLog();
+    const result = await rankJobs(jobs, 'p', {
+      log,
+      fetchImpl: async () => { const e = new Error('aborted'); e.name = 'TimeoutError'; throw e; },
+    });
+    assert.equal(result, null);
+    assert.match(log.errors.join(' '), /timed out after 1ms/);
+  });
+
+  test('budget exhausted by reasoning -> null, and says so', async () => {
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    const log = makeLog();
+    const result = await rankJobs(jobs, 'p', {
+      log,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ finish_reason: 'length', message: { content: '' } }] }),
+      }),
+    });
+    assert.equal(result, null);
+    assert.match(log.errors.join(' '), /budget on reasoning/);
   });
 
   // Every failure below must return null rather than throw: a broken ranker

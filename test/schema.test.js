@@ -191,6 +191,33 @@ describe('looksRemote()', () => {
     assert.equal(looksRemote('', 'Senior Engineer, Remote'), true);
   });
 
+  // Canonical writes every remote role as "Home based - <region>" and never
+  // uses the word "remote". Before this, 297 of its 303 fully-remote postings
+  // reached the ranker looking on-site.
+  test('"home based" counts as remote, hyphenated or spaced', () => {
+    assert.equal(looksRemote('Home based - EMEA'), true);
+    assert.equal(looksRemote('Home Based - Americas'), true);
+    assert.equal(looksRemote('home-based'), true);
+  });
+
+  test('a role open both home based and office based is still remote', () => {
+    assert.equal(
+      looksRemote('Home based - Worldwide; Office Based - Taipei, Taiwan'),
+      true,
+    );
+  });
+
+  test('office based alone is not remote', () => {
+    assert.equal(looksRemote('Office Based - Taipei, Taiwan'), false);
+  });
+
+  test('no speculative matches: "virtual" and "flexible" are not remote signals', () => {
+    // Deliberately excluded - they produce false positives and the live scan
+    // found no posting that needed them.
+    assert.equal(looksRemote('Virtual Reality Engineer'), false);
+    assert.equal(looksRemote('Flexible working hours, Berlin'), false);
+  });
+
   test('"non-remote" is not treated as remote', () => {
     assert.equal(looksRemote('This is a non-remote position'), false);
   });

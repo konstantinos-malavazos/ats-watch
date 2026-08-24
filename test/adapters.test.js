@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { isWellFormed } from '../lib/schema.js';
 import * as greenhouse from '../lib/adapters/greenhouse.js';
 import * as lever from '../lib/adapters/lever.js';
+import * as ashby from '../lib/adapters/ashby.js';
+import * as workable from '../lib/adapters/workable.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const COMPANY = { name: 'Test Co', ats: 'greenhouse', token: 'testco' };
@@ -217,5 +219,166 @@ describe('salary mapping', () => {
   test('salary is part of the schema on every row', () => {
     assert.ok(leverRows.every((r) => typeof r.salary === 'string'));
     assert.ok(leverRows.every((r) => isWellFormed(r)));
+  });
+});
+
+
+// Both fixtures below are REAL responses (ramp's Ashby board, blueground's
+// Workable account, fetched 2026-08-24) with descriptions truncated for
+// reviewability, plus two hand-added rows each for edge cases the live boards
+// did not happen to contain. Unlike the older SYNTHETIC fixtures, these prove
+// the shape as well as the parsing.
+describe('ashby adapter', () => {
+  const COMPANY_ASHBY = { name: 'Ramp', ats: 'ashby', token: 'ramp' };
+  const rows = ashby.parse(loadFixture('ashby.json'), COMPANY_ASHBY);
+
+  test('parses and every row is well-formed and tagged ats=ashby', () => {
+    assert.ok(rows.length > 0);
+    for (const row of rows) {
+      assert.ok(isWellFormed(row), `not well-formed: ${JSON.stringify(row)}`);
+      assert.equal(row.ats, 'ashby');
+    }
+  });
+
+  test('builds the documented URL and asks for compensation', () => {
+    assert.equal(
+      ashby.buildUrl('ramp'),
+      'https://api.ashbyhq.com/posting-api/job-board/ramp?includeCompensation=true',
+    );
+  });
+
+  test('isListed:false is dropped, and so is a row with no title', () => {
+    assert.ok(!rows.some((r) => r.ats_job_id === 'synthetic-unlisted'));
+    assert.ok(!rows.some((r) => r.ats_job_id === 'synthetic-no-title'));
+  });
+
+  test('salary comes through as the already-formatted range', () => {
+    const row = rows.find((r) => r.ats_job_id === '34413f8d-26bf-4bbc-8ade-eb309a0e2245');
+    assert.ok(row);
+    assert.equal(row.salary, '$211.4K - $290.6K');
+  });
+
+  test('falls back to the tier summary when the scrapeable field is null', () => {
+    // This internship posting leaves scrapeableCompensationSalarySummary null
+    // but does publish a tier summary. Real row, real null.
+    const row = rows.find((r) => r.ats_job_id === '67fadb77-43d8-4449-954b-d4cf2c6d3b8b');
+    assert.ok(row);
+    assert.equal(row.salary, '$11.7K per month');
+  });
+
+  test('a posting with no published range at all gets an empty salary', () => {
+    const [row] = ashby.parse({ jobs: [{
+      id: 'nopay', title: 'No Pay Stated', location: 'Remote',
+      publishedAt: '2026-08-01T00:00:00.000+00:00',
+      jobUrl: 'https://jobs.ashbyhq.com/x/nopay', descriptionPlain: 'x',
+      compensation: { scrapeableCompensationSalarySummary: null, compensationTierSummary: null },
+    }] }, COMPANY_ASHBY);
+    assert.equal(row.salary, '');
+  });
+
+  test('secondary locations are appended to the primary one', () => {
+    const row = rows.find((r) => r.ats_job_id === '34413f8d-26bf-4bbc-8ade-eb309a0e2245');
+    assert.match(row.location, /^New York, NY \(HQ\);/);
+    assert.ok(row.location.includes('Remote (US)'), row.location);
+  });
+
+  test("isRemote wins over a workplaceType that does not say 'Remote'", () => {
+    // Ramp tags this Hybrid but flags isRemote true; the two disagree and we
+    // trust the more permissive signal, as the Lever adapter does.
+    const row = rows.find((r) => r.ats_job_id === '34413f8d-26bf-4bbc-8ade-eb309a0e2245');
+    assert.equal(row.remote, true);
+  });
+
+  test('an OnSite posting with no remote signal is not marked remote', () => {
+    const row = rows.find((r) => r.ats_job_id === '6a20b3b8-8111-4cbd-be4b-423b60660738');
+    assert.equal(row.remote, false);
+  });
+
+  test('publishedAt with an offset normalises to ISO UTC', () => {
+    for (const row of rows) assert.match(row.posted_at, /^\d{4}-\d{2}-\d{2}T.*Z$/);
+  });
+
+  test('an empty board yields no rows rather than throwing', () => {
+    assert.deepEqual(ashby.parse({ jobs: [], apiVersion: '1' }, COMPANY_ASHBY), []);
+    assert.deepEqual(ashby.parse(null, COMPANY_ASHBY), []);
+  });
+});
+
+describe('workable adapter', () => {
+  const COMPANY_WORKABLE = { name: 'Blueground', ats: 'workable', token: 'blueground' };
+  const rows = workable.parse(loadFixture('workable.json'), COMPANY_WORKABLE);
+
+  test('parses and every row is well-formed and tagged ats=workable', () => {
+    assert.ok(rows.length > 0);
+    for (const row of rows) {
+      assert.ok(isWellFormed(row), `not well-formed: ${JSON.stringify(row)}`);
+      assert.equal(row.ats, 'workable');
+    }
+  });
+
+  test('builds the public widget URL with details=true', () => {
+    assert.equal(
+      workable.buildUrl('blueground'),
+      'https://apply.workable.com/api/v1/widget/accounts/blueground?details=true',
+    );
+  });
+
+  test('keys on shortcode, not the frequently-empty code field', () => {
+    assert.ok(rows.some((r) => r.ats_job_id === '0FD01ABC66'));
+  });
+
+  test('a row with no title is dropped', () => {
+    assert.ok(!rows.some((r) => r.ats_job_id === 'NOTITLE01'));
+  });
+
+  test('city, region and country are joined, and duplicates collapse', () => {
+    // The flat city/state/country fields and the locations[] entry describe
+    // the same place here, so the result is one location, not two.
+    const row = rows.find((r) => r.ats_job_id === '3C3D8183F6');
+    assert.ok(row);
+    assert.equal(row.location, 'Athens, Attica, Greece');
+  });
+
+  test('a second, genuinely different location is kept alongside the first', () => {
+    const [row] = workable.parse({ jobs: [{
+      title: 'Two Places', shortcode: 'TWO01', url: 'https://apply.workable.com/j/TWO01',
+      published_on: '2026-08-20', city: 'Athens', state: 'Attica', country: 'Greece',
+      locations: [
+        { country: 'Greece', city: 'Athens', region: 'Attica', hidden: false },
+        { country: 'Netherlands', city: 'Amsterdam', region: null, hidden: false },
+      ],
+      description: '<p>x</p>',
+    }] }, COMPANY_WORKABLE);
+    assert.equal(row.location, 'Athens, Attica, Greece; Amsterdam, Netherlands');
+  });
+
+  test('a hidden location is not leaked into the location string', () => {
+    const row = rows.find((r) => r.ats_job_id === 'HIDDEN01');
+    assert.ok(row);
+    assert.equal(row.location, '');
+  });
+
+  test('telecommuting drives the remote flag', () => {
+    assert.equal(rows.find((r) => r.ats_job_id === '0FD01ABC66').remote, true);
+    assert.equal(rows.find((r) => r.ats_job_id === '3C3D8183F6').remote, false);
+  });
+
+  test('a bare YYYY-MM-DD published_on becomes ISO UTC', () => {
+    const row = rows.find((r) => r.ats_job_id === '0FD01ABC66');
+    assert.equal(row.posted_at, '2026-08-18T00:00:00.000Z');
+  });
+
+  test('description HTML is reduced to text', () => {
+    const row = rows.find((r) => r.ats_job_id === 'HIDDEN01');
+    assert.equal(row.raw_description, 'Location withheld by the employer.');
+  });
+
+  test('Workable states no pay, so salary is always empty', () => {
+    for (const row of rows) assert.equal(row.salary, '');
+  });
+
+  test('an empty account yields no rows rather than throwing', () => {
+    assert.deepEqual(workable.parse({ jobs: [] }, COMPANY_WORKABLE), []);
+    assert.deepEqual(workable.parse(null, COMPANY_WORKABLE), []);
   });
 });

@@ -1,18 +1,18 @@
 # ats-watch
 
 A personal daily job watcher. Pulls open roles from public, unauthenticated ATS
-feeds, keeps the ones it has never seen before, and (once a provider is wired
-in) has an LLM rank them against your profile.
+feeds, keeps the ones it has never seen before, and has an LLM rank them
+against your profile.
 
 Personal use only. No auth, no scraping of logged-in sites, no republishing.
 
 ## Status
 
-Phase 1. The full fetch → normalise → dedupe → persist → first-seen → filter →
-rank → print pipeline is implemented and tested offline (131 tests). Two things
-are still open, both blocked on the authoring environment rather than on design
-— see **Known gaps**: the seed companies and the ATS field mappings are both
-unverified.
+Phase 1, and the pipeline now runs end to end for real. fetch → normalise →
+dedupe → persist → first-seen → filter → rank → print is implemented, covered
+by 185 offline tests, and **confirmed against live ATS feeds and a live ranked
+run** (2026-08-24: 2,643 postings from 15 boards, scored by deepseek-v4-pro).
+The remaining open item is the seed company list — see **Known gaps**.
 
 ## Requirements
 
@@ -82,15 +82,30 @@ defaulting to DeepSeek:
 | `ATS_WATCH_LLM_API_KEY` | — | required; falls back to `DEEPSEEK_API_KEY` |
 | `ATS_WATCH_LLM_BASE_URL` | `https://api.deepseek.com` | |
 | `ATS_WATCH_LLM_MODEL` | `deepseek-v4-pro` | |
+| `ATS_WATCH_LLM_MAX_TOKENS` | `2560 + 400/job`, capped at 32768 | output budget; must cover reasoning tokens |
+| `ATS_WATCH_LLM_TIMEOUT_MS` | `300000` (5 min) | a reasoning model on a 20+ job batch takes minutes |
 
 ```
 export DEEPSEEK_API_KEY=sk-...
 ./ats-watch
 ```
 
-The base URL is configurable because it could not be confirmed from the
-authoring environment (see **Known gaps**), so a wrong default is an env change
-rather than a code change. Point it at any OpenAI-compatible endpoint.
+The base URL and model were **confirmed against the live API on 2026-08-24**
+and are correct as they stand. They remain configurable so you can point the
+ranker at any other OpenAI-compatible endpoint.
+
+**The model is a reasoning model.** `deepseek-v4-pro` spends tokens on hidden
+reasoning before it emits any content, and those count against `max_tokens`.
+Measured live, a five-job prompt burnt 750-1020 reasoning tokens on its own, so
+the output budget is sized to cover the reasoning pass and the answer. Set it
+too low and the response comes back with `finish_reason: "length"` and empty
+content, which degrades to the unranked list. If you swap in a non-reasoning
+model you can safely lower `ATS_WATCH_LLM_MAX_TOKENS`.
+
+**It is also slow.** A real 21-job batch took **2m37s** end to end. The timeout
+is set at five minutes on the assumption that a cron job would rather wait than
+lose the day's ranking. Lower `ATS_WATCH_LLM_TIMEOUT_MS` if you are running it
+interactively and would rather have the unranked list quickly.
 
 **Every ranker failure degrades to the unranked list**: no key, a network
 error, a non-2xx, a timeout, or a response that is not the JSON we asked for.
@@ -104,11 +119,20 @@ stderr or the state file.
 |---|---|---|
 | Greenhouse | `https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true` | Implemented, **confirmed against a live response**. No pay field exists in the response, so `salary` is always empty. |
 | Lever | `https://api.lever.co/v0/postings/{site}?mode=json` | Implemented, **confirmed against a live response** |
-| Ashby | — | **Not implemented** (endpoint could not be verified) |
-| Workable | — | **Not implemented** (endpoint could not be verified) |
+| Ashby | `https://api.ashbyhq.com/posting-api/job-board/{board}?includeCompensation=true` | Implemented, **confirmed against a live response**. The only source that states pay: 131/137 postings on one board carried a range. |
+| Workable | `https://apply.workable.com/api/v1/widget/accounts/{account}?details=true` | Implemented, **confirmed against a live response**. No pay field exists, so `salary` is always empty. |
 
 Explicitly out of scope: LinkedIn, Indeed, Glassdoor, and anything behind
-Cloudflare or a login.
+Cloudflare or a login. Workable also exposes `{account}.workable.com/spi/v3/jobs`,
+which most write-ups point at, but it answers 401 without an API token and is
+therefore out of scope too — the public widget endpoint above is the one this
+tool uses.
+
+Two behaviours worth knowing when adding boards: an **unknown Ashby board
+returns 200 with an empty `jobs` array**, so a typo shows up as a silent zero
+rather than an error, while an **unknown Workable account returns 404** and
+surfaces as a failed source on stderr. Check the per-source counts on stderr
+after adding either.
 
 Fetching is polite by construction: strictly sequential requests, a ~1s delay
 between them, a real User-Agent, and a 15s per-request timeout. **One failing
@@ -140,17 +164,33 @@ authoring session.
    inferred shape and are labelled `SYNTHETIC` — they prove the parsing logic,
    not the shape.
 
-3. **Ashby and Workable are unimplemented.** The brief required verifying their
-   endpoints with a real request first. That was impossible, so per the brief
-   they were left out rather than guessed at.
+3. **Ashby and Workable are now implemented and VERIFIED** (2026-08-24). Both
+   endpoints and every mapped field were confirmed against live boards — Ashby
+   against ramp, linear and posthog; Workable against blueground and hotjar —
+   before a line of either adapter was written, which is the order the brief
+   asked for. Their fixtures in `test/fixtures/` are **real trimmed responses**
+   rather than `SYNTHETIC`, so they prove the shape as well as the parsing.
 
-4. **The DeepSeek endpoint is INFERRED.** `https://api.deepseek.com/v1/chat/completions`
-   and the model name `deepseek-v4-pro` were taken from search results, not
-   from a fetched API document — `api-docs.deepseek.com` was blocked too. The
-   request is a standard OpenAI-compatible chat completion, so it should work
-   against DeepSeek or any compatible gateway, but **confirm the base URL and
-   model name against DeepSeek's own docs** before relying on it. Both are env
-   variables precisely so this costs nothing to correct.
+   Ashby is the first source that states pay. It is opt-in per employer:
+   ramp published a range on 131 of 137 postings, linear and posthog on none.
+   The range arrives as an already-formatted string, so `formatSalary()` — which
+   expects `{min,max,currency}` — does not apply to it.
+
+4. **The DeepSeek endpoint is now VERIFIED** (2026-08-24). A real ranked run
+   completed end to end: `POST https://api.deepseek.com/v1/chat/completions`
+   with model `deepseek-v4-pro` returned 200 and scored jobs. Both inferred
+   values turned out to be right.
+
+   The one real defect the live run exposed was the output token budget, not
+   the endpoint — see **Ranker** above. It was sized for the answer only and
+   was consumed entirely by the model's reasoning pass, so every run came back
+   with empty content and silently degraded to the unranked list. Fixed, with
+   the failure now named explicitly on stderr instead of the generic "no
+   message content".
+
+   Note that DeepSeek's own API reference documents the path as
+   `POST /chat/completions`, without `/v1`. Both are served; the code uses
+   `/v1` and that is confirmed working.
 
 ## Why not node:sqlite
 
@@ -190,6 +230,18 @@ no pay field at all in the responses observed, so Greenhouse jobs never carry a
 salary. The ranker receives `null` for an unstated salary and is told that null
 means unknown, not low.
 
+**Remote detection is evidence-led.** `looksRemote()` matches a deliberately
+short list of phrasings. "home based" is on it because a scan of all 3342
+postings across the configured boards found it was the only remote-sounding
+phrasing being missed, on 271 rows: Canonical writes every remote role as
+"Home based - EMEA" and never uses the word "remote", so 297 of its 303
+fully-remote postings were reaching the ranker looking on-site. Widening the
+pattern moved the corpus from 1031 to 1302 remote-flagged roles with no new
+false positives. Words like "virtual" and "flexible" are deliberately absent —
+they misfire ("Virtual Reality Engineer") and no live posting needed them. If
+you add a board whose remote roles are being missed, re-run that scan rather
+than guessing at a phrase.
+
 **`--since` keeps jobs with no `posted_at`.** We cannot prove such a job is old,
 and a job you never see is worse than a job you skim past.
 
@@ -212,10 +264,10 @@ at other people's job boards on every pull request.
 ## Tests
 
 ```
-node --test test/
+npm test
 ```
 
-131 tests, entirely offline — the adapters are tested against fixtures in
+185 tests, entirely offline — the adapters are tested against fixtures in
 `test/fixtures/`, and the ranker against an injected `fetchImpl`. No test makes
 a network request.
 
