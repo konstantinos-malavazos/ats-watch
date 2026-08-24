@@ -113,7 +113,7 @@ describe('buildUserPrompt()', () => {
 
 describe('rankJobs()', () => {
   const KEY_VARS = ['ATS_WATCH_LLM_API_KEY', 'DEEPSEEK_API_KEY'];
-  const CFG_VARS = ['ATS_WATCH_LLM_BASE_URL', 'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS'];
+  const CFG_VARS = ['ATS_WATCH_LLM_BASE_URL', 'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS', 'ATS_WATCH_LLM_TIMEOUT_MS'];
   let saved;
 
   beforeEach(() => {
@@ -244,6 +244,27 @@ describe('rankJobs()', () => {
       fetchImpl: async (_u, init) => { seenInit = init; return reply(goodBody); },
     });
     assert.equal(JSON.parse(seenInit.body).max_tokens, 1234);
+  });
+
+  // The first real 23-job run took 2m37s: a reasoning model on a large batch
+  // blows straight through a one-minute timeout.
+  test('timeout is generous by default and env-overridable', async () => {
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    let seenSignal;
+    await rankJobs(jobs, 'p', {
+      log: makeLog(),
+      fetchImpl: async (_u, init) => { seenSignal = init.signal; return reply(goodBody); },
+    });
+    assert.ok(seenSignal instanceof AbortSignal);
+
+    process.env.ATS_WATCH_LLM_TIMEOUT_MS = '1';
+    const log = makeLog();
+    const result = await rankJobs(jobs, 'p', {
+      log,
+      fetchImpl: async () => { const e = new Error('aborted'); e.name = 'TimeoutError'; throw e; },
+    });
+    assert.equal(result, null);
+    assert.match(log.errors.join(' '), /timed out after 1ms/);
   });
 
   test('budget exhausted by reasoning -> null, and says so', async () => {

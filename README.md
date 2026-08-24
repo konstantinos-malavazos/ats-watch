@@ -10,7 +10,7 @@ Personal use only. No auth, no scraping of logged-in sites, no republishing.
 
 Phase 1, and the pipeline now runs end to end for real. fetch → normalise →
 dedupe → persist → first-seen → filter → rank → print is implemented, covered
-by 157 offline tests, and **confirmed against live ATS feeds and a live ranked
+by 158 offline tests, and **confirmed against live ATS feeds and a live ranked
 run** (2026-08-24: 2,643 postings from 15 boards, scored by deepseek-v4-pro).
 The remaining open item is the seed company list — see **Known gaps**.
 
@@ -83,6 +83,7 @@ defaulting to DeepSeek:
 | `ATS_WATCH_LLM_BASE_URL` | `https://api.deepseek.com` | |
 | `ATS_WATCH_LLM_MODEL` | `deepseek-v4-pro` | |
 | `ATS_WATCH_LLM_MAX_TOKENS` | `2560 + 400/job`, capped at 32768 | output budget; must cover reasoning tokens |
+| `ATS_WATCH_LLM_TIMEOUT_MS` | `300000` (5 min) | a reasoning model on a 20+ job batch takes minutes |
 
 ```
 export DEEPSEEK_API_KEY=sk-...
@@ -100,6 +101,11 @@ the output budget is sized to cover the reasoning pass and the answer. Set it
 too low and the response comes back with `finish_reason: "length"` and empty
 content, which degrades to the unranked list. If you swap in a non-reasoning
 model you can safely lower `ATS_WATCH_LLM_MAX_TOKENS`.
+
+**It is also slow.** A real 21-job batch took **2m37s** end to end. The timeout
+is set at five minutes on the assumption that a cron job would rather wait than
+lose the day's ranking. Lower `ATS_WATCH_LLM_TIMEOUT_MS` if you are running it
+interactively and would rather have the unranked list quickly.
 
 **Every ranker failure degrades to the unranked list**: no key, a network
 error, a non-2xx, a timeout, or a response that is not the JSON we asked for.
@@ -232,7 +238,7 @@ at other people's job boards on every pull request.
 npm test
 ```
 
-157 tests, entirely offline — the adapters are tested against fixtures in
+158 tests, entirely offline — the adapters are tested against fixtures in
 `test/fixtures/`, and the ranker against an injected `fetchImpl`. No test makes
 a network request.
 
