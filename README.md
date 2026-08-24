@@ -10,7 +10,7 @@ Personal use only. No auth, no scraping of logged-in sites, no republishing.
 
 Phase 1, and the pipeline now runs end to end for real. fetch → normalise →
 dedupe → persist → first-seen → filter → rank → print is implemented, covered
-by 158 offline tests, and **confirmed against live ATS feeds and a live ranked
+by 181 offline tests, and **confirmed against live ATS feeds and a live ranked
 run** (2026-08-24: 2,643 postings from 15 boards, scored by deepseek-v4-pro).
 The remaining open item is the seed company list — see **Known gaps**.
 
@@ -119,11 +119,20 @@ stderr or the state file.
 |---|---|---|
 | Greenhouse | `https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true` | Implemented, **confirmed against a live response**. No pay field exists in the response, so `salary` is always empty. |
 | Lever | `https://api.lever.co/v0/postings/{site}?mode=json` | Implemented, **confirmed against a live response** |
-| Ashby | — | **Not implemented** (endpoint could not be verified) |
-| Workable | — | **Not implemented** (endpoint could not be verified) |
+| Ashby | `https://api.ashbyhq.com/posting-api/job-board/{board}?includeCompensation=true` | Implemented, **confirmed against a live response**. The only source that states pay: 131/137 postings on one board carried a range. |
+| Workable | `https://apply.workable.com/api/v1/widget/accounts/{account}?details=true` | Implemented, **confirmed against a live response**. No pay field exists, so `salary` is always empty. |
 
 Explicitly out of scope: LinkedIn, Indeed, Glassdoor, and anything behind
-Cloudflare or a login.
+Cloudflare or a login. Workable also exposes `{account}.workable.com/spi/v3/jobs`,
+which most write-ups point at, but it answers 401 without an API token and is
+therefore out of scope too — the public widget endpoint above is the one this
+tool uses.
+
+Two behaviours worth knowing when adding boards: an **unknown Ashby board
+returns 200 with an empty `jobs` array**, so a typo shows up as a silent zero
+rather than an error, while an **unknown Workable account returns 404** and
+surfaces as a failed source on stderr. Check the per-source counts on stderr
+after adding either.
 
 Fetching is polite by construction: strictly sequential requests, a ~1s delay
 between them, a real User-Agent, and a 15s per-request timeout. **One failing
@@ -155,9 +164,17 @@ authoring session.
    inferred shape and are labelled `SYNTHETIC` — they prove the parsing logic,
    not the shape.
 
-3. **Ashby and Workable are unimplemented.** The brief required verifying their
-   endpoints with a real request first. That was impossible, so per the brief
-   they were left out rather than guessed at.
+3. **Ashby and Workable are now implemented and VERIFIED** (2026-08-24). Both
+   endpoints and every mapped field were confirmed against live boards — Ashby
+   against ramp, linear and posthog; Workable against blueground and hotjar —
+   before a line of either adapter was written, which is the order the brief
+   asked for. Their fixtures in `test/fixtures/` are **real trimmed responses**
+   rather than `SYNTHETIC`, so they prove the shape as well as the parsing.
+
+   Ashby is the first source that states pay. It is opt-in per employer:
+   ramp published a range on 131 of 137 postings, linear and posthog on none.
+   The range arrives as an already-formatted string, so `formatSalary()` — which
+   expects `{min,max,currency}` — does not apply to it.
 
 4. **The DeepSeek endpoint is now VERIFIED** (2026-08-24). A real ranked run
    completed end to end: `POST https://api.deepseek.com/v1/chat/completions`
@@ -238,7 +255,7 @@ at other people's job boards on every pull request.
 npm test
 ```
 
-158 tests, entirely offline — the adapters are tested against fixtures in
+181 tests, entirely offline — the adapters are tested against fixtures in
 `test/fixtures/`, and the ranker against an injected `fetchImpl`. No test makes
 a network request.
 
