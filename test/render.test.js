@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderDigest, BUDGET } from '../lib/render.js';
+import { renderDigest, renderDiscord, renderDiscordChunks, BUDGET } from '../lib/render.js';
 
 function makeJob(overrides = {}) {
   return {
@@ -139,5 +139,113 @@ describe('salary in the digest', () => {
     const out = renderDigest(jobs, null);
     assert.ok(out.length <= BUDGET, `digest was ${out.length} chars`);
     assert.ok(!/\x1b\[/.test(out));
+  });
+});
+
+describe('renderDiscord()', () => {
+  const jobs = [
+    makeJob({ id: 'a', title: 'Staff Platform Engineer', company: 'n8n', remote: true,
+      location: 'Greece', salary: 'EUR 127,500-175,300/yr', url: 'https://x/a' }),
+    makeJob({ id: 'b', title: 'Payroll Specialist', company: 'Remote.com',
+      location: 'Remote-South America', remote: true, url: 'https://x/b' }),
+  ];
+  const ranks = new Map([
+    ['a', { score: 9, rationale: 'Greece listed, salary stated', red_flags: [] }],
+    ['b', { score: 0, rationale: 'not engineering', red_flags: ['non-engineering', 'excludes EU'] }],
+  ]);
+
+  test('no jobs renders nothing', () => {
+    assert.equal(renderDiscord([], ranks), '');
+  });
+
+  test('header counts the roles and the ones worth applying to', () => {
+    const out = renderDiscord(jobs, ranks);
+    assert.match(out, /\*\*2 new roles\*\* · 1 worth applying to/);
+  });
+
+  test('a high score reads as an instruction, not a bare number', () => {
+    const out = renderDiscord(jobs, ranks);
+    assert.match(out, /🟢 \*\*9\/10 · send your CV\*\*/);
+    assert.match(out, /🔴 \*\*0\/10 · skip\*\*/);
+  });
+
+  test('urls are wrapped in angle brackets so Discord does not unfurl them', () => {
+    const out = renderDiscord(jobs, ranks);
+    assert.match(out, /\[Staff Platform Engineer\]\(<https:\/\/x\/a>\)/);
+  });
+
+  test('salary and location ride along when present', () => {
+    const out = renderDiscord(jobs, ranks);
+    assert.match(out, /n8n · Remote - Greece · EUR 127,500-175,300\/yr/);
+  });
+
+  test('red flags are rendered, and absent flags print no line', () => {
+    const out = renderDiscord(jobs, ranks);
+    assert.match(out, /⚠️ non-engineering · excludes EU/);
+    assert.equal((out.match(/⚠️/g) || []).length, 1);
+  });
+
+  test('an unavailable ranker still lists every job', () => {
+    const out = renderDiscord(jobs, null);
+    assert.match(out, /unranked \(ranker unavailable\)/);
+    assert.match(out, /Staff Platform Engineer/);
+    assert.match(out, /Payroll Specialist/);
+  });
+
+  test('nothing is dropped: every job appears regardless of length', () => {
+    const many = Array.from({ length: 40 }, (_, i) =>
+      makeJob({ id: `j${i}`, ats_job_id: String(i), title: `Role Number ${i}`, url: `https://x/${i}` }));
+    const out = renderDiscord(many, null);
+    for (let i = 0; i < 40; i++) assert.match(out, new RegExp(`Role Number ${i}\\b`));
+    assert.ok(!out.includes('more'), 'must not fall back to a "+N more" tail');
+  });
+});
+
+describe('renderDiscordChunks()', () => {
+  test('empty in, empty out', () => {
+    assert.deepEqual(renderDiscordChunks(''), []);
+  });
+
+  test('a short digest stays one message', () => {
+    assert.equal(renderDiscordChunks('a\n\nb').length, 1);
+  });
+
+  test('every chunk is within the limit and nothing is lost', () => {
+    const blocks = Array.from({ length: 30 }, (_, i) => `block ${i} ` + 'x'.repeat(100));
+    const text = blocks.join('\n\n');
+    const chunks = renderDiscordChunks(text, 500);
+    assert.ok(chunks.length > 1, 'should have split');
+    for (const c of chunks) assert.ok(c.length <= 500, `chunk of ${c.length} exceeds limit`);
+    for (let i = 0; i < 30; i++) assert.ok(chunks.some((c) => c.includes(`block ${i} `)));
+  });
+
+  test('splits between blocks, never inside one', () => {
+    const text = ['aaa', 'bbb', 'ccc'].map((s) => s.repeat(50)).join('\n\n');
+    for (const c of renderDiscordChunks(text, 160)) {
+      assert.ok(!/^\n|\n$/.test(c), 'chunk should not start or end mid-join');
+    }
+  });
+
+  test('a single oversized block is clamped rather than dropped', () => {
+    const chunks = renderDiscordChunks('y'.repeat(5000), 200);
+    assert.equal(chunks.length, 1);
+    assert.ok(chunks[0].length <= 200);
+  });
+});
+
+describe('renderDiscord() location handling', () => {
+  test('a long eligible-country list is condensed to a count', () => {
+    const job = makeJob({
+      id: 'a', title: 'Staff Engineer', company: 'n8n', remote: true, url: 'https://x/a',
+      location: 'Berlin Office; Romania; Norway; Estonia; Latvia; Greece',
+    });
+    const out = renderDiscord([job], null);
+    assert.match(out, /n8n · Remote - 6 locations/);
+    assert.ok(!out.includes('Estonia'), 'the full list must not survive');
+  });
+
+  test('three or fewer locations are printed as-is', () => {
+    const job = makeJob({ id: 'a', company: 'N26', location: 'Berlin, Barcelona', url: 'https://x/a' });
+    assert.match(renderDiscord([job], null), /N26 · Berlin, Barcelona/);
   });
 });
