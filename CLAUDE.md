@@ -105,7 +105,14 @@ a test, because they misfire and no posting needed them.
 The ranker's model is a reasoning model: hidden reasoning tokens come out of
 `max_tokens` before any content is emitted, and a large batch takes minutes.
 Both are env-tunable (`ATS_WATCH_LLM_MAX_TOKENS`, `ATS_WATCH_LLM_TIMEOUT_MS`).
-There is no batching — one request carries the whole selection.
+The selection is sent in batches of at most 20 postings
+(`ATS_WATCH_LLM_BATCH_SIZE`), one request at a time. Larger batches make the
+model drop entries — it returns well-formed JSON with fewer rankings than
+postings, which `parseRankingResponse` cannot detect, because a short map
+parses exactly like a complete one. Observed repeatedly at 30. Scores are
+absolute, so merging batches is sound; a batch that fails leaves its jobs
+unranked rather than sinking the run, and `null` is returned only when every
+batch fails.
 
 CI never touches live ATS endpoints; that would fire twenty-five requests at
 other people's job boards on every pull request. Live checks are the manual

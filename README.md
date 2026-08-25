@@ -283,6 +283,33 @@ silently: no declared dependencies and no lockfile, an executable entry point
 with its shebang that runs both bare-path and via `node`, and a run with
 nothing to report printing nothing while exiting 0.
 
+## Daily run
+
+`tools/daily-run.sh` runs the tool and posts the digest to a Discord webhook.
+It is written for cron, which supplies no shell profile and no environment, so
+it loads everything it needs from a config file kept outside the repo:
+
+```
+~/.config/ats-watch/env          (mode 600, override with ATS_WATCH_ENV)
+  ATS_WATCH_DISCORD_WEBHOOK=...  webhook URL for the target channel
+  DEEPSEEK_API_KEY=...           ranker key; absent means an unranked digest
+```
+
+Silence carries through: no new jobs means nothing is posted, exactly as a bare
+run prints nothing. A run that fails posts nothing rather than posting a
+half-digest, and a digest that cannot be delivered is written to stderr — and
+so to the cron log — rather than dropped.
+
+The installed schedule is 09:00 Europe/Athens:
+
+```
+CRON_TZ=Europe/Athens
+0 9 * * * /home/kostas/code/ats-watch/tools/daily-run.sh >> ~/.local/state/ats-watch/cron.log 2>&1
+```
+
+`CRON_TZ` matters: the host clock is UTC, so a bare `0 9` would drift by an
+hour at each DST changeover.
+
 ## Out of scope
 
-Discord delivery, cron scheduling, deployment. Phase 2.
+Deployment. Phase 2.

@@ -113,7 +113,7 @@ describe('buildUserPrompt()', () => {
 
 describe('rankJobs()', () => {
   const KEY_VARS = ['ATS_WATCH_LLM_API_KEY', 'DEEPSEEK_API_KEY'];
-  const CFG_VARS = ['ATS_WATCH_LLM_BASE_URL', 'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS', 'ATS_WATCH_LLM_TIMEOUT_MS'];
+  const CFG_VARS = ['ATS_WATCH_LLM_BASE_URL', 'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS', 'ATS_WATCH_LLM_TIMEOUT_MS', 'ATS_WATCH_LLM_BATCH_SIZE'];
   let saved;
 
   beforeEach(() => {
@@ -379,5 +379,149 @@ describe('salary reaches the ranker', () => {
 
   test('the system prompt tells the model that null salary means unknown, not low', () => {
     assert.match(SYSTEM_PROMPT, /null means unknown, NOT low/i);
+  });
+});
+
+describe('rankJobs() batching', () => {
+  const CFG_VARS = [
+    'ATS_WATCH_LLM_API_KEY', 'DEEPSEEK_API_KEY', 'ATS_WATCH_LLM_BASE_URL',
+    'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS', 'ATS_WATCH_LLM_TIMEOUT_MS',
+    'ATS_WATCH_LLM_BATCH_SIZE',
+  ];
+  let saved;
+
+  beforeEach(() => {
+    saved = {};
+    for (const k of CFG_VARS) { saved[k] = process.env[k]; delete process.env[k]; }
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+  });
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  function makeLog() {
+    const warns = [], errors = [], infos = [];
+    return {
+      warns, errors, infos,
+      warn: (...a) => warns.push(a.join(' ')),
+      error: (...a) => errors.push(a.join(' ')),
+      info: (...a) => infos.push(a.join(' ')),
+    };
+  }
+
+  /** n jobs with distinct ids. */
+  const manyJobs = (n) => Array.from({ length: n }, (_, i) =>
+    makeJob({ id: `j${i}`, ats_job_id: String(i) }));
+
+  /** A fetch that scores every posting it is handed, recording batch sizes. */
+  function scoringFetch(sizes) {
+    return async (_url, init) => {
+      const body = JSON.parse(init.body);
+      const prompt = body.messages[1].content;
+      const postings = JSON.parse(prompt.slice(prompt.indexOf('['), prompt.lastIndexOf(']') + 1));
+      sizes.push(postings.length);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({
+          rankings: postings.map((p) => ({ id: p.id, score: 5, rationale: 'ok', red_flags: [] })),
+        }) } }] }),
+        text: async () => '',
+      };
+    };
+  }
+
+  test('20 jobs go out as a single request', async () => {
+    const sizes = [];
+    const result = await rankJobs(manyJobs(20), 'p', { log: makeLog(), fetchImpl: scoringFetch(sizes) });
+    assert.deepEqual(sizes, [20]);
+    assert.equal(result.size, 20);
+  });
+
+  test('41 jobs are split into batches of at most 20 and merged', async () => {
+    const sizes = [];
+    const log = makeLog();
+    const result = await rankJobs(manyJobs(41), 'p', { log, fetchImpl: scoringFetch(sizes) });
+    assert.deepEqual(sizes, [20, 20, 1]);
+    assert.equal(result.size, 41, 'every job appears exactly once in the merged map');
+    assert.ok(log.infos.some((i) => /3 batches of up to 20/.test(i)));
+  });
+
+  test('every job is scored exactly once across batches', async () => {
+    const sizes = [];
+    const jobs = manyJobs(45);
+    const result = await rankJobs(jobs, 'p', { log: makeLog(), fetchImpl: scoringFetch(sizes) });
+    for (const j of jobs) assert.ok(result.has(j.id), `${j.id} missing from merged map`);
+    assert.equal(sizes.reduce((a, b) => a + b, 0), 45, 'no posting sent twice');
+  });
+
+  test('ATS_WATCH_LLM_BATCH_SIZE overrides the default', async () => {
+    process.env.ATS_WATCH_LLM_BATCH_SIZE = '5';
+    const sizes = [];
+    await rankJobs(manyJobs(12), 'p', { log: makeLog(), fetchImpl: scoringFetch(sizes) });
+    assert.deepEqual(sizes, [5, 5, 2]);
+  });
+
+  test('one failing batch does not sink the others', async () => {
+    const log = makeLog();
+    let call = 0;
+    const good = scoringFetch([]);
+    const result = await rankJobs(manyJobs(40), 'p', {
+      log,
+      fetchImpl: async (url, init) => {
+        if (++call === 1) return { ok: false, status: 500, text: async () => 'boom' };
+        return good(url, init);
+      },
+    });
+    assert.equal(result.size, 20, 'the surviving batch is still returned');
+    assert.ok(log.warns.some((w) => /1 of 2 batches failed/.test(w)));
+    assert.ok(log.warns.some((w) => /scored 20 of 40/.test(w)));
+  });
+
+  test('every batch failing returns null, as the unranked fallback', async () => {
+    const log = makeLog();
+    const result = await rankJobs(manyJobs(40), 'p', {
+      log, fetchImpl: async () => { throw new Error('network down'); },
+    });
+    assert.equal(result, null);
+  });
+
+  test('a batch that silently drops entries is warned about', async () => {
+    const log = makeLog();
+    const result = await rankJobs(manyJobs(20), 'p', {
+      log,
+      fetchImpl: async (_url, init) => {
+        const prompt = JSON.parse(init.body).messages[1].content;
+        const postings = JSON.parse(prompt.slice(prompt.indexOf('['), prompt.lastIndexOf(']') + 1));
+        const short = postings.slice(0, 17).map((p) => ({ id: p.id, score: 4, rationale: 'x', red_flags: [] }));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: JSON.stringify({ rankings: short }) } }] }),
+          text: async () => '',
+        };
+      },
+    });
+    assert.equal(result.size, 17);
+    assert.ok(log.warns.some((w) => /returned 17 of 20 postings/.test(w)));
+  });
+
+  test('batches go out sequentially, not concurrently', async () => {
+    let inFlight = 0, maxInFlight = 0;
+    const good = scoringFetch([]);
+    await rankJobs(manyJobs(60), 'p', {
+      log: makeLog(),
+      fetchImpl: async (url, init) => {
+        maxInFlight = Math.max(maxInFlight, ++inFlight);
+        await new Promise((r) => setImmediate(r));
+        inFlight--;
+        return good(url, init);
+      },
+    });
+    assert.equal(maxInFlight, 1);
   });
 });
