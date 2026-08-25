@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises';
 import { parseCliArgs, HELP_TEXT } from './lib/args.js';
 import { makeLogger } from './lib/log.js';
 import { loadState, saveState, defaultStatePath } from './lib/store.js';
-import { selectNew } from './lib/seen.js';
+import { selectNew, PRUNE_AFTER_DAYS } from './lib/seen.js';
 import { adapterFor } from './lib/adapters/index.js';
 import { politeSequential } from './lib/http.js';
 import { filterSince, applyLimit } from './lib/filter.js';
@@ -82,6 +82,9 @@ async function main() {
   const state = await loadState(statePath);
   const { fresh, nextState, counts } = selectNew(fetched, state);
   log.info(`unique ${counts.unique}, already known ${counts.known}, new ${counts.fresh}`);
+  if (counts.pruned) {
+    log.info(`pruned ${counts.pruned} entr(y/ies) unseen for ${PRUNE_AFTER_DAYS}+ days`);
+  }
 
   // --- filter ------------------------------------------------------------
   let selected = filterSince(fresh, opts.since);

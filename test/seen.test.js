@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dedupe, selectNew, emptyState } from '../lib/seen.js';
+import { dedupe, selectNew, emptyState, PRUNE_AFTER_DAYS } from '../lib/seen.js';
 import * as greenhouse from '../lib/adapters/greenhouse.js';
 import * as lever from '../lib/adapters/lever.js';
 
@@ -62,7 +62,7 @@ describe('selectNew() on empty state', () => {
       assert.equal(rec.first_seen, now);
       assert.equal(rec.last_seen, now);
     }
-    assert.deepEqual(counts, { fetched: 2, unique: 2, fresh: 2, known: 0 });
+    assert.deepEqual(counts, { fetched: 2, unique: 2, fresh: 2, known: 0, pruned: 0 });
   });
 });
 
@@ -143,5 +143,81 @@ describe('counts', () => {
     assert.equal(second.counts.unique, 3);
     assert.equal(second.counts.fresh, 0);
     assert.equal(second.counts.known, 3);
+  });
+});
+
+
+describe('pruning entries that left their board', () => {
+  const DAY = 86400000;
+  const now = '2026-08-25T00:00:00.000Z';
+  const ago = (days) => new Date(Date.parse(now) - days * DAY).toISOString();
+
+  function stateWith(records) {
+    const jobs = {};
+    for (const [key, last_seen] of Object.entries(records)) {
+      jobs[key] = { first_seen: last_seen, last_seen, ats: 'greenhouse', company_token: 'acme', ats_job_id: key.split(':')[2], title: 't', url: 'u' };
+    }
+    return { version: 1, jobs };
+  }
+
+  test('drops an entry unseen for longer than the window', () => {
+    const state = stateWith({ 'greenhouse:acme:old': ago(PRUNE_AFTER_DAYS + 1) });
+    const { nextState, counts } = selectNew([], state, now);
+
+    assert.deepEqual(Object.keys(nextState.jobs), []);
+    assert.equal(counts.pruned, 1);
+  });
+
+  test('keeps an entry just inside the window', () => {
+    const state = stateWith({ 'greenhouse:acme:recent': ago(PRUNE_AFTER_DAYS - 1) });
+    const { nextState, counts } = selectNew([], state, now);
+
+    assert.deepEqual(Object.keys(nextState.jobs), ['greenhouse:acme:recent']);
+    assert.equal(counts.pruned, 0);
+  });
+
+  test('a job still on the board is never pruned, however old its first_seen', () => {
+    const job = makeJob({ ats_job_id: '1' });
+    const seeded = selectNew([job], emptyState(), ago(5 * PRUNE_AFTER_DAYS));
+    const { fresh, nextState, counts } = selectNew([job], seeded.nextState, now);
+
+    assert.equal(fresh.length, 0, 'still known, not re-reported');
+    assert.equal(counts.pruned, 0);
+    assert.equal(Object.keys(nextState.jobs).length, 1);
+  });
+
+  test('pruning does not resurrect a pruned job as new in the same run', () => {
+    // The entry is stale AND absent from this run: it goes. A different job
+    // arriving in the same run is fresh on its own merits, not because of it.
+    const state = stateWith({ 'greenhouse:acme:gone': ago(PRUNE_AFTER_DAYS + 10) });
+    const { fresh, counts } = selectNew([makeJob({ ats_job_id: '2' })], state, now);
+
+    assert.equal(counts.pruned, 1);
+    assert.equal(fresh.length, 1);
+    assert.equal(fresh[0].ats_job_id, '2');
+  });
+
+  test('an entry with an unreadable last_seen is kept, not deleted', () => {
+    const state = { version: 1, jobs: { 'greenhouse:acme:weird': { first_seen: 'nonsense', last_seen: 'nonsense', title: 't', url: 'u' } } };
+    const { nextState, counts } = selectNew([], state, now);
+
+    assert.deepEqual(Object.keys(nextState.jobs), ['greenhouse:acme:weird']);
+    assert.equal(counts.pruned, 0);
+  });
+
+  test('selectNew stays pure: pruning does not touch the state passed in', () => {
+    const state = stateWith({ 'greenhouse:acme:old': ago(PRUNE_AFTER_DAYS + 1) });
+    const before = JSON.stringify(state);
+    selectNew([], state, now);
+
+    assert.equal(JSON.stringify(state), before);
+  });
+
+  test('pruning can be switched off with pruneAfterDays: 0', () => {
+    const state = stateWith({ 'greenhouse:acme:ancient': ago(10 * PRUNE_AFTER_DAYS) });
+    const { nextState, counts } = selectNew([], state, now, { pruneAfterDays: 0 });
+
+    assert.equal(counts.pruned, 0);
+    assert.equal(Object.keys(nextState.jobs).length, 1);
   });
 });
