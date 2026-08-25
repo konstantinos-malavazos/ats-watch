@@ -285,7 +285,10 @@ nothing to report printing nothing while exiting 0.
 
 ## Daily run
 
-`tools/daily-run.sh` runs the tool and posts the digest to a Discord webhook.
+`tools/daily-run.sh` runs the tool with `--format discord` and pipes the result
+to `tools/post-discord.mjs`, which splits it across as many messages as it
+takes — Discord caps one message at 2000 characters, and a digest of eight
+roles does not fit.
 It is written for cron, which supplies no shell profile and no environment, so
 it loads everything it needs from a config file kept outside the repo:
 

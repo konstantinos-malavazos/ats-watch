@@ -18,7 +18,7 @@ import { adapterFor } from './lib/adapters/index.js';
 import { politeSequential } from './lib/http.js';
 import { filterSince, applyLimit } from './lib/filter.js';
 import { rankJobs } from './lib/rank.js';
-import { renderDigest } from './lib/render.js';
+import { renderDigest, renderDiscord } from './lib/render.js';
 
 const REQUEST_DELAY_MS = 1000;
 const REQUEST_TIMEOUT_MS = 15000;
@@ -125,7 +125,9 @@ async function main() {
   }
 
   // --- print -------------------------------------------------------------
-  const digest = renderDigest(selected, ranks);
+  const digest = opts.format === 'discord'
+    ? renderDiscord(selected, ranks)
+    : renderDigest(selected, ranks);
   if (digest) process.stdout.write(`${digest}\n`);
 }
 

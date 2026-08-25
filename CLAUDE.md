@@ -78,6 +78,16 @@ Two consequences that keep surprising people: `--limit` and `--since` filter
 only what is *printed*. `nextState` is built from everything fetched, so a run
 with either flag still marks every fetched posting as seen.
 
+**There are two renderers.** `renderDigest()` is the product on stdout and is
+hard-constrained: plain text, no ANSI, capped at `BUDGET` (1500) chars, whole
+entries only, with a `+N more` tail when it runs out of room. `renderDiscord()`
+targets the delivery path only, uses Discord markdown, and is deliberately
+uncapped — `tools/post-discord.mjs` splits it on role boundaries via
+`renderDiscordChunks()` and sends as many messages as it takes. The `+N more`
+tail was silently hiding half of an eight-role digest; on a surface that can
+send two messages, dropping jobs is the wrong trade. `--format discord`
+selects it; `text` stays the default so the stdout contract is untouched.
+
 **The ranker (`lib/rank.js`) must never throw and never lose the day's jobs.**
 Every failure path — no key, network error, non-2xx, unparseable body, wrong
 JSON shape — returns `null`, which the pipeline prints as the unranked list
