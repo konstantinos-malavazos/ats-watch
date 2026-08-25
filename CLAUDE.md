@@ -63,9 +63,16 @@ token, not the display name, so renaming a company in `companies.json` doesn't
 make all its postings look new. A job is new iff that tuple is absent from
 state; a changed title or date does not make it new.
 
-**State is written before ranking** (`ats-watch:99`), so a ranker failure can't
+**State is written before ranking** (`ats-watch:102`), so a ranker failure can't
 cause the same jobs to be reported as new tomorrow. `selectNew()` is pure and
 returns the next state rather than mutating, which is what makes that correct.
+
+**State is pruned on write.** An entry missing from the current run for more
+than `PRUNE_AFTER_DAYS` (90) is dropped, so filled postings don't accumulate
+forever. Only entries absent from *this* run are candidates — everything the run
+saw has `last_seen === now` — so the window is 90 consecutive days off the
+board, which is the margin that keeps a failing feed from re-reporting its whole
+backlog as new.
 
 Two consequences that keep surprising people: `--limit` and `--since` filter
 only what is *printed*. `nextState` is built from everything fetched, so a run
