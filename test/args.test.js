@@ -108,3 +108,35 @@ describe('--companies / --state', () => {
     assert.ok(opts.statePath.endsWith('somewhere/state.json'));
   });
 });
+
+describe('--min-score', () => {
+  test('absent -> null', () => {
+    assert.equal(parseCliArgs([]).minScore, null);
+  });
+
+  test('parses an integer', () => {
+    assert.equal(parseCliArgs(['--min-score', '7']).minScore, 7);
+  });
+
+  test('0 is accepted and means no cutoff', () => {
+    assert.equal(parseCliArgs(['--min-score', '0']).minScore, 0);
+  });
+
+  test('above 10 throws', () => {
+    assert.throws(() => parseCliArgs(['--min-score', '11']));
+  });
+
+  test('non-numeric throws', () => {
+    assert.throws(() => parseCliArgs(['--min-score', 'high']));
+  });
+});
+
+describe('--no-title-filter', () => {
+  test('absent -> the title filter is on', () => {
+    assert.equal(parseCliArgs([]).titleFilter, true);
+  });
+
+  test('present -> the title filter is off', () => {
+    assert.equal(parseCliArgs(['--no-title-filter']).titleFilter, false);
+  });
+});

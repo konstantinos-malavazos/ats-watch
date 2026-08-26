@@ -32,6 +32,8 @@ node ./ats-watch               # identical; both invocation styles work
 ./ats-watch --since 7d         # only roles posted in the last week
 ./ats-watch --since 2026-01-15 # ISO dates work too
 ./ats-watch --limit 10         # cap the digest
+./ats-watch --min-score 7      # only print roles the ranker scored 7+
+./ats-watch --no-title-filter  # send sales/back-office titles to the ranker too
 ./ats-watch --no-rank          # skip ranking, print the unranked list
 ./ats-watch --quiet            # suppress info-level stderr chatter
 ./ats-watch --help
@@ -242,6 +244,22 @@ they misfire ("Virtual Reality Engineer") and no live posting needed them. If
 you add a board whose remote roles are being missed, re-run that scan rather
 than guessing at a phrase.
 
+**The title filter keeps what it does not recognise.** It drops go-to-market
+and back-office titles before the ranker sees them — measured at 1562 of 3497
+live postings — but a title matching none of its patterns is kept. It never has
+to recognise engineering to let a job through, and every drop is written to
+stderr so a run can be audited. `--no-title-filter` turns it off.
+
+**Re-listings are collapsed for the digest only.** One opening published once
+per country arrives as many postings with different ATS ids; the digest shows
+one entry with "also listed in N other locations", while state keeps every id
+so the copies do not look new tomorrow.
+
+**`--min-score` never drops an unranked job.** The cutoff runs after ranking
+and only shortens the digest — state is already written, and a job the ranker
+skipped, or a whole run with no ranking at all, comes through untouched. A
+model that quietly returns a short map must not be able to hide a role.
+
 **`--since` keeps jobs with no `posted_at`.** We cannot prove such a job is old,
 and a job you never see is worse than a job you skim past.
 
@@ -267,7 +285,7 @@ at other people's job boards on every pull request.
 npm test
 ```
 
-185 tests, entirely offline — the adapters are tested against fixtures in
+243 tests, entirely offline — the adapters are tested against fixtures in
 `test/fixtures/`, and the ranker against an injected `fetchImpl`. No test makes
 a network request.
 
@@ -285,8 +303,8 @@ nothing to report printing nothing while exiting 0.
 
 ## Daily run
 
-`tools/daily-run.sh` runs the tool with `--format discord` and pipes the result
-to `tools/post-discord.mjs`, which splits it across as many messages as it
+`tools/daily-run.sh` runs the tool with `--format discord --min-score 7` and
+pipes the result to `tools/post-discord.mjs`, which splits it across as many messages as it
 takes — Discord caps one message at 2000 characters, and a digest of eight
 roles does not fit.
 It is written for cron, which supplies no shell profile and no environment, so
@@ -298,10 +316,18 @@ it loads everything it needs from a config file kept outside the repo:
   DEEPSEEK_API_KEY=...           ranker key; absent means an unranked digest
 ```
 
-Silence carries through: no new jobs means nothing is posted, exactly as a bare
-run prints nothing. A run that fails posts nothing rather than posting a
-half-digest, and a digest that cannot be delivered is written to stderr — and
-so to the cron log — rather than dropped.
+Silence does **not** carry through to Discord. A bare run with nothing to say
+prints nothing, but the daily script posts a short "No jobs today" line in that
+case: an empty channel and a broken cron job look identical otherwise. A run
+that fails posts nothing at all rather than posting a half-digest, and a digest
+that cannot be delivered is written to stderr — and so to the cron log — rather
+than dropped.
+
+The cron slot is 14:00 Europe/Athens, which is 11:00 UTC in summer and 12:00
+UTC in winter. That is deliberate: DeepSeek bills peak rates at 01:00–04:00 and
+06:00–10:00 UTC, Monday to Friday, and half that everywhere else, so the ranker
+runs off-peak on both sides of the DST change. The previous 09:00 Athens slot
+was 06:00 UTC — the start of the morning peak window.
 
 The installed schedule is 09:00 Europe/Athens:
 

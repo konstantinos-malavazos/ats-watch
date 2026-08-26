@@ -2,7 +2,7 @@
 // ats-watch - personal daily job watcher over public ATS feeds.
 //
 // Pipeline: fetch -> normalise -> dedupe -> persist -> select first-seen
-//           -> filter -> rank -> print.
+//           -> filter -> collapse re-listings -> rank -> score cutoff -> print.
 //
 // STDOUT IS THE PRODUCT: a normal run prints a short digest and nothing else,
 // and prints nothing at all when there is no news. Everything diagnostic goes
@@ -16,7 +16,8 @@ import { loadState, saveState, defaultStatePath } from './lib/store.js';
 import { selectNew, PRUNE_AFTER_DAYS } from './lib/seen.js';
 import { adapterFor } from './lib/adapters/index.js';
 import { politeSequential } from './lib/http.js';
-import { filterSince, applyLimit } from './lib/filter.js';
+import { filterSince, applyLimit, filterByScore, filterTitles } from './lib/filter.js';
+import { collapseVariants } from './lib/variants.js';
 import { rankJobs } from './lib/rank.js';
 import { renderDigest, renderDiscord } from './lib/render.js';
 
@@ -91,7 +92,22 @@ async function main() {
   if (opts.since && selected.length !== fresh.length) {
     log.info(`--since ${opts.since} dropped ${fresh.length - selected.length} of ${fresh.length}`);
   }
-  selected = applyLimit(selected, opts.limit);
+
+  // Before the ranker, so the garbage costs no tokens. Everything it drops is
+  // still in nextState, and every dropped title is logged.
+  if (opts.titleFilter) {
+    selected = filterTitles(selected, { log });
+  } else {
+    log.info('--no-title-filter: every title goes to the ranker');
+  }
+
+  // One role listed once per country is one role. State keeps every id; only
+  // this run's selection is collapsed.
+  const { jobs: collapsed, variants } = collapseVariants(selected);
+  if (collapsed.length !== selected.length) {
+    log.info(`collapsed ${selected.length - collapsed.length} re-listing(s) of the same role`);
+  }
+  selected = applyLimit(collapsed, opts.limit);
 
   // --- persist -----------------------------------------------------------
   // Written BEFORE ranking so that a ranker failure cannot cause the same jobs
@@ -124,10 +140,23 @@ async function main() {
     }
   }
 
+  // --- score cutoff ------------------------------------------------------
+  // Applied after ranking, so the state file and the ranker both saw every
+  // job; only the digest is shortened. Unranked jobs survive it - see
+  // filterByScore().
+  const printable = filterByScore(selected, ranks, opts.minScore);
+  if (printable.length !== selected.length) {
+    log.info(`--min-score ${opts.minScore} held back ${selected.length - printable.length} of ${selected.length}`);
+  }
+  if (!printable.length) {
+    log.info(`no new jobs scoring ${opts.minScore} or above`);
+    return; // exit 0, printing nothing - same contract as "no new jobs".
+  }
+
   // --- print -------------------------------------------------------------
   const digest = opts.format === 'discord'
-    ? renderDiscord(selected, ranks)
-    : renderDigest(selected, ranks);
+    ? renderDiscord(printable, ranks, variants)
+    : renderDigest(printable, ranks, variants);
   if (digest) process.stdout.write(`${digest}\n`);
 }
 

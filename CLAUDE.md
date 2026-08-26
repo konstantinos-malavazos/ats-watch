@@ -41,7 +41,8 @@ One pipeline, in `ats-watch` (the executable entry point), each stage a pure
 module in `lib/`:
 
 ```
-fetch → normalise → dedupe → first-seen → filter → persist → rank → print
+fetch → normalise → dedupe → first-seen → filter → collapse re-listings
+      → persist → rank → score cutoff → print
 ```
 
 **`lib/schema.js` is the contract.** Every adapter must return objects with
@@ -73,6 +74,46 @@ forever. Only entries absent from *this* run are candidates — everything the r
 saw has `last_seen === now` — so the window is 90 consecutive days off the
 board, which is the margin that keeps a failing feed from re-reporting its whole
 backlog as new.
+
+**The title filter runs before the ranker** (`lib/filter.js`, `titleVerdict`).
+Roughly two thirds of what these boards publish is sales, marketing,
+recruitment, finance or customer success, and it used to cost a ranking each.
+The rules are ordered and the last one decides the design: go-to-market titles
+drop first (a Sales Engineer is not an engineer), an engineering word then
+rescues a title from the back-office list ("Senior Frontend Engineer, Marketing
+Website"), and **a title matching nothing is kept** — the filter never has to
+recognise engineering to let a job through. Measured on 3497 live titles: 1562
+dropped, and the only engineering-sounding casualties were three "Customer
+Success Engineer" rows. Re-run that scan before widening either pattern, the
+same way `looksRemote()` was widened. `--no-title-filter` turns it off.
+
+**Re-listings are collapsed per run, never in state** (`lib/variants.js`).
+Boards publish one opening once per country, each with its own `ats_job_id`, so
+the dedupe tuple cannot see it — 1247 of those same 3497 rows were re-listings.
+`collapseVariants()` groups on `(ats, company_token, baseTitle)` and returns a
+side map of counts, which the renderers print as "also listed in N other
+locations". `baseTitle()` only strips a trailing title segment when the
+posting's own `location` field confirms it is a place, so "Backend Engineer,
+Search" and "Backend Engineer, Payments" stay apart. The counts travel beside
+the jobs rather than on them, because `lib/schema.js` owns the twelve fields.
+State still records every `ats_job_id`, or tomorrow every collapsed copy would
+look new.
+
+**`--min-score <n>` is a print-time cutoff, applied after ranking.** Everything
+fetched is still recorded as seen and everything selected is still ranked; only
+the digest is shortened. Jobs the ranker returned no entry for, and runs where
+ranking was unavailable, are never dropped by it — a short map from the model
+parses exactly like a complete one, so the cutoff must not be able to turn that
+into a role you never see. The daily Discord run uses `--min-score 7`; stdout
+has no cutoff by default. `tools/daily-run.sh` posts a short "No jobs today"
+line when the cutoff leaves nothing — the tool's silence is a contract, but a
+silent Discord channel is indistinguishable from a broken cron job.
+
+**The cron slot is chosen for DeepSeek's off-peak window.** Peak billing is
+01:00-04:00 and 06:00-10:00 UTC, Monday to Friday; everything else is half
+price. The run is at 14:00 Europe/Athens, i.e. 11:00 UTC in summer and 12:00
+UTC in winter, off-peak on both sides of the DST change. The old 09:00 Athens
+slot sat at 06:00 UTC, squarely in peak.
 
 Two consequences that keep surprising people: `--limit` and `--since` filter
 only what is *printed*. `nextState` is built from everything fetched, so a run

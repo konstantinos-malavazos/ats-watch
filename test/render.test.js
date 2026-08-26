@@ -249,3 +249,26 @@ describe('renderDiscord() location handling', () => {
     assert.match(renderDiscord([job], null), /N26 · Berlin, Barcelona/);
   });
 });
+
+describe('re-listing counts', () => {
+  const jobs = [makeJob({ id: 'a', ats_job_id: 'a', title: 'Principal PM' })];
+  const variants = new Map([['a', { count: 26, locations: ['Spain', 'Canada'] }]]);
+
+  test('renderDigest() names the other locations', () => {
+    assert.match(renderDigest(jobs, null, variants), /also listed in 25 other locations/);
+  });
+
+  test('renderDiscord() names the other locations', () => {
+    assert.match(renderDiscord(jobs, null, variants), /also listed in 25 other locations/);
+  });
+
+  test('a count of 2 is singular', () => {
+    const one = new Map([['a', { count: 2, locations: ['Spain'] }]]);
+    assert.match(renderDiscord(jobs, null, one), /also listed in 1 other location\b/);
+  });
+
+  test('no variants map -> no extra line', () => {
+    assert.doesNotMatch(renderDigest(jobs, null, null), /also listed/);
+    assert.doesNotMatch(renderDiscord(jobs, null, null), /also listed/);
+  });
+});
