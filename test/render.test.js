@@ -158,9 +158,19 @@ describe('renderDiscord()', () => {
     assert.equal(renderDiscord([], ranks), '');
   });
 
-  test('header counts the roles and the ones worth applying to', () => {
+  test('header counts the roles by verdict band', () => {
     const out = renderDiscord(jobs, ranks);
-    assert.match(out, /\*\*2 new roles\*\* · 1 worth applying to/);
+    assert.match(out, /\*\*2 new roles\*\* · 1 send your CV, 1 skip/);
+  });
+
+  test('header never says nobody should apply while a badge says otherwise', () => {
+    const look = new Map([
+      ['a', { score: 7, rationale: '', red_flags: [] }],
+      ['b', { score: 7, rationale: '', red_flags: [] }],
+    ]);
+    const out = renderDiscord(jobs, look);
+    assert.match(out, /\*\*2 new roles\*\* · 2 worth a look/);
+    assert.doesNotMatch(out, /worth applying to/);
   });
 
   test('a high score reads as an instruction, not a bare number', () => {
