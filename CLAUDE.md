@@ -84,8 +84,12 @@ rescues a title from the back-office list ("Senior Frontend Engineer, Marketing
 Website"), and **a title matching nothing is kept** — the filter never has to
 recognise engineering to let a job through. Measured on 3497 live titles: 1562
 dropped, and the only engineering-sounding casualties were three "Customer
-Success Engineer" rows. Re-run that scan before widening either pattern, the
-same way `looksRemote()` was widened. `--no-title-filter` turns it off.
+Success Engineer" rows. Re-measured on 4019 titles in September 2026 when the
+financial-crime, risk-operations and partner-management families were added:
+1816 dropped, zero engineering casualties. Re-run that scan before widening
+either pattern, the same way `looksRemote()` was widened. A title the widening
+drops by mistake is fixed in `ENGINEERING_RE`, not by narrowing the exclusion.
+`--no-title-filter` turns it off.
 
 **Re-listings are collapsed per run, never in state** (`lib/variants.js`).
 Boards publish one opening once per country, each with its own `ats_job_id`, so
@@ -164,6 +168,18 @@ parses exactly like a complete one. Observed repeatedly at 30. Scores are
 absolute, so merging batches is sound; a batch that fails leaves its jobs
 unranked rather than sinking the run, and `null` is returned only when every
 batch fails.
+
+**A batch cut off at `max_tokens` is halved and retried** (`rankSplitting`), and
+that is the only failure retried at all — a smaller batch cannot fix a bad key
+or a network error, but it is exactly the fix for an answer that did not fit.
+No token budget is provably large enough, because reasoning tokens are spent
+before any content and are invisible until they have already eaten the answer;
+the budget now scales its reasoning term with the batch as well as its answer
+term, and the split catches what that still misses. Both matter because an
+unranked job walks past `--min-score` by design: on 2026-09-03 a truncated
+8-job batch put eight non-engineering roles into the digest under a header
+announcing one. `renderDiscord()` now counts those as "N unranked" in its
+header, so the header never leaves a role beneath it unaccounted for.
 
 CI never touches live ATS endpoints; that would fire twenty-five requests at
 other people's job boards on every pull request. Live checks are the manual
