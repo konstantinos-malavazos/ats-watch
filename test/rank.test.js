@@ -525,3 +525,135 @@ describe('rankJobs() batching', () => {
     assert.equal(maxInFlight, 1);
   });
 });
+
+// A truncated response is the one failure a retry can fix: the answer did not
+// fit in max_tokens, and half a batch is half an answer. On 2026-09-03 the
+// day's last batch of 8 was cut off, and because rankJobs gave up on it, all 8
+// jobs printed unranked - which walked them straight past --min-score 7.
+describe('rankJobs() split-on-truncation', () => {
+  const CFG_VARS = [
+    'ATS_WATCH_LLM_API_KEY', 'DEEPSEEK_API_KEY', 'ATS_WATCH_LLM_BASE_URL',
+    'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS', 'ATS_WATCH_LLM_TIMEOUT_MS',
+    'ATS_WATCH_LLM_BATCH_SIZE',
+  ];
+  let saved;
+
+  beforeEach(() => {
+    saved = {};
+    for (const k of CFG_VARS) { saved[k] = process.env[k]; delete process.env[k]; }
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+  });
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  function makeLog() {
+    const warns = [], errors = [], infos = [];
+    return {
+      warns, errors, infos,
+      warn: (...a) => warns.push(a.join(' ')),
+      error: (...a) => errors.push(a.join(' ')),
+      info: (...a) => infos.push(a.join(' ')),
+    };
+  }
+
+  const manyJobs = (n) => Array.from({ length: n }, (_, i) =>
+    makeJob({ id: `j${i}`, ats_job_id: String(i) }));
+
+  function postingsOf(init) {
+    const prompt = JSON.parse(init.body).messages[1].content;
+    return JSON.parse(prompt.slice(prompt.indexOf('['), prompt.lastIndexOf(']') + 1));
+  }
+
+  /** Truncates any request carrying more than `limit` postings; scores the rest. */
+  function truncateAbove(limit, sizes) {
+    return async (_url, init) => {
+      const postings = postingsOf(init);
+      sizes.push(postings.length);
+      if (postings.length > limit) {
+        return {
+          ok: true,
+          status: 200,
+          // Cut off mid-answer, exactly as the live failure looked.
+          json: async () => ({ choices: [{
+            finish_reason: 'length',
+            message: { content: '{"rankings":[{"id":"j0","score":5,"rationale":"cut' },
+          }] }),
+          text: async () => '',
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+          rankings: postings.map((p) => ({ id: p.id, score: 5, rationale: 'ok', red_flags: [] })),
+        }) } }] }),
+        text: async () => '',
+      };
+    };
+  }
+
+  test('a cut-off batch is halved and retried until it fits', async () => {
+    const sizes = [];
+    const log = makeLog();
+    const result = await rankJobs(manyJobs(8), 'p', { log, fetchImpl: truncateAbove(4, sizes) });
+    assert.deepEqual(sizes, [8, 4, 4], 'the 8 is retried as two 4s');
+    assert.equal(result.size, 8, 'no job is lost to the truncation');
+    assert.ok(log.warns.some((w) => /retrying as 4 \+ 4/.test(w)));
+  });
+
+  test('splitting recurses until the batch fits', async () => {
+    const sizes = [];
+    const result = await rankJobs(manyJobs(8), 'p', { log: makeLog(), fetchImpl: truncateAbove(2, sizes) });
+    assert.deepEqual(sizes, [8, 4, 2, 2, 4, 2, 2]);
+    assert.equal(result.size, 8);
+  });
+
+  test('a single posting that still truncates is not retried forever', async () => {
+    const sizes = [];
+    const log = makeLog();
+    const result = await rankJobs(manyJobs(2), 'p', { log, fetchImpl: truncateAbove(0, sizes) });
+    assert.deepEqual(sizes, [2, 1, 1], 'bottoms out at one posting per request');
+    assert.equal(result, null, 'nothing was rankable, so the caller prints unranked');
+  });
+
+  test('a non-truncation failure is NOT retried - a smaller batch cannot fix it', async () => {
+    const sizes = [];
+    const log = makeLog();
+    const result = await rankJobs(manyJobs(8), 'p', {
+      log,
+      fetchImpl: async (_u, init) => {
+        sizes.push(postingsOf(init).length);
+        return { ok: false, status: 401, text: async () => 'bad key' };
+      },
+    });
+    assert.deepEqual(sizes, [8], 'one request, no split');
+    assert.equal(result, null);
+  });
+
+  test('the token budget grows with the batch on both terms', async () => {
+    const budgets = [];
+    const capture = async (_url, init) => {
+      const body = JSON.parse(init.body);
+      budgets.push(body.max_tokens);
+      const postings = postingsOf(init);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+          rankings: postings.map((p) => ({ id: p.id, score: 5, rationale: 'ok', red_flags: [] })),
+        }) } }] }),
+        text: async () => '',
+      };
+    };
+    process.env.ATS_WATCH_LLM_BATCH_SIZE = '8';
+    await rankJobs(manyJobs(8), 'p', { log: makeLog(), fetchImpl: capture });
+    // 2048 headroom + 300/job reasoning + 512 + 400/job answer.
+    assert.equal(budgets[0], 2048 + 300 * 8 + 512 + 400 * 8);
+    assert.ok(budgets[0] > 5760, 'above the budget that failed live on 8 jobs');
+  });
+});

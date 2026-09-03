@@ -163,6 +163,21 @@ describe('renderDiscord()', () => {
     assert.match(out, /\*\*2 new roles\*\* · 1 send your CV, 1 skip/);
   });
 
+  // A job the ranker returned no entry for cannot be held back by --min-score,
+  // so it lands in the digest with no badge. On 2026-09-03 eight of them sat
+  // under a header reading "1 send your CV", which read as eight silent
+  // recommendations. The header has to account for every role beneath it.
+  test('header names the roles the ranker returned no entry for', () => {
+    const partial = new Map([['a', { score: 9, rationale: '', red_flags: [] }]]);
+    const out = renderDiscord(jobs, partial);
+    assert.match(out, /\*\*2 new roles\*\* · 1 send your CV, 1 unranked/);
+  });
+
+  test('a wholly unscored map is still described, not passed off as scored', () => {
+    const out = renderDiscord(jobs, new Map([['zzz', { score: 9, rationale: '', red_flags: [] }]]));
+    assert.match(out, /\*\*2 new roles\*\* · 2 unranked/);
+  });
+
   test('header never says nobody should apply while a badge says otherwise', () => {
     const look = new Map([
       ['a', { score: 7, rationale: '', red_flags: [] }],

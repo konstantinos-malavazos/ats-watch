@@ -140,6 +140,42 @@ describe('titleVerdict()', () => {
     ]) assert.equal(titleVerdict(t), 'keep', t);
   });
 
+  // The families that reached the digest on 2026-09-03, when a truncated
+  // ranker batch let them past --min-score. Re-measured over 4019 live titles:
+  // 90 more rows dropped, none of them carrying an engineering word.
+  test('drops financial-crime and risk-operations back-office titles', () => {
+    for (const t of [
+      'Fraud Investigator, Overnight Team',
+      'Internal Control Apprentice (Operations)',
+      'Financial Promotions Manager',
+      'Vendor Management Internship',
+      'Operations Associate, Financial Crimes (AML Investigations)',
+      'Credit Risk Analyst, EMEA Underwriting',
+      'KYB/KYC Operations Associate, Bridge (English fluency)',
+      'Credit Operations Collections Analyst',
+    ]) assert.equal(titleVerdict(t), 'drop', t);
+  });
+
+  test('drops partner-management titles, which are revenue roles', () => {
+    for (const t of [
+      'Senior Partner Manager SI, DACH',
+      'Principal Partner Manager - Technology Alliances',
+      'Partner Development Manager, Financial Connections',
+    ]) assert.equal(titleVerdict(t), 'drop', t);
+  });
+
+  // The rescue rule is where a false drop gets fixed, not a narrower
+  // exclusion: "Staff Applied Scientist, Financial Forecasting" was the single
+  // engineering casualty of the widening above.
+  test('an engineering word still rescues a title from the new exclusions', () => {
+    for (const t of [
+      'Staff Applied Scientist, Financial Forecasting',
+      'Fraud Detection Engineer',
+      'Senior Software Engineer, Financial Crime Platform',
+      'Backend Engineer, Disputes',
+    ]) assert.equal(titleVerdict(t), 'keep', t);
+  });
+
   test('an unrecognised title is KEPT, not dropped', () => {
     for (const t of [
       'AI Transformation Owner', 'Field CTO (Japan)', 'Group Product Manager, Cloud Security',
