@@ -635,6 +635,60 @@ describe('rankJobs() split-on-truncation', () => {
     assert.equal(result, null);
   });
 
+  // Observed 2026-10-09: DeepSeek closed the socket mid-reply on a 20-job
+  // batch. The error below is what Node 22's fetch actually threw.
+  function terminated() {
+    const err = new TypeError('terminated');
+    err.cause = new Error('other side closed');
+    return err;
+  }
+
+  test('a dropped connection is retried once with the same batch', async () => {
+    const sizes = [];
+    const log = makeLog();
+    const scoreAll = truncateAbove(Infinity, []);
+    let calls = 0;
+    const result = await rankJobs(manyJobs(8), 'p', {
+      log,
+      retryDelayMs: 0,
+      fetchImpl: async (url, init) => {
+        sizes.push(postingsOf(init).length);
+        if (calls++ === 0) throw terminated();
+        return scoreAll(url, init);
+      },
+    });
+    assert.deepEqual(sizes, [8, 8], 'resent whole, not split');
+    assert.equal(result.size, 8, 'no job is lost to the dropped connection');
+    assert.ok(log.warns.some((w) => /connection dropped - retrying once/.test(w)));
+    assert.match(log.errors[0], /terminated \(other side closed\)/, 'the cause is logged');
+  });
+
+  test('a connection that drops twice gives up after one retry', async () => {
+    const sizes = [];
+    const result = await rankJobs(manyJobs(8), 'p', {
+      log: makeLog(),
+      retryDelayMs: 0,
+      fetchImpl: async (_u, init) => { sizes.push(postingsOf(init).length); throw terminated(); },
+    });
+    assert.deepEqual(sizes, [8, 8]);
+    assert.equal(result, null);
+  });
+
+  test('a timeout or an unrelated error is NOT treated as a dropped connection', async () => {
+    for (const make of [
+      () => { const e = new Error('aborted'); e.name = 'TimeoutError'; return e; },
+      () => new TypeError('Cannot read properties of undefined'),
+    ]) {
+      const sizes = [];
+      await rankJobs(manyJobs(2), 'p', {
+        log: makeLog(),
+        retryDelayMs: 0,
+        fetchImpl: async (_u, init) => { sizes.push(postingsOf(init).length); throw make(); },
+      });
+      assert.deepEqual(sizes, [2], 'one request, no retry');
+    }
+  });
+
   test('the token budget grows with the batch on both terms', async () => {
     const budgets = [];
     const capture = async (_url, init) => {

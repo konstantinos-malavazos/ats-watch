@@ -169,9 +169,14 @@ absolute, so merging batches is sound; a batch that fails leaves its jobs
 unranked rather than sinking the run, and `null` is returned only when every
 batch fails.
 
-**A batch cut off at `max_tokens` is halved and retried** (`rankSplitting`), and
-that is the only failure retried at all — a smaller batch cannot fix a bad key
-or a network error, but it is exactly the fix for an answer that did not fit.
+**A batch cut off at `max_tokens` is halved and retried** (`rankSplitting`) — a
+smaller batch cannot fix a bad key or a network error, but it is exactly the
+fix for an answer that did not fit. **A dropped connection is resent once,
+unsplit, after 5s**: fetch's `TypeError` "terminated" (socket closed mid-body)
+or "fetch failed" (no response), matched exactly. On 2026-10-09 DeepSeek closed
+the socket mid-reply ("other side closed") and a whole 20-job batch printed
+unranked. Those are the only two retries; HTTP errors, timeouts and bad JSON
+are not.
 No token budget is provably large enough, because reasoning tokens are spent
 before any content and are invisible until they have already eaten the answer;
 the budget now scales its reasoning term with the batch as well as its answer
