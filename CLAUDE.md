@@ -102,6 +102,10 @@ Search" and "Backend Engineer, Payments" stay apart. The counts travel beside
 the jobs rather than on them, because `lib/schema.js` owns the twelve fields.
 State still records every `ats_job_id`, or tomorrow every collapsed copy would
 look new.
+The ranker is handed the same map and sees a collapsed role's location as every
+country it was listed in: the profile's residence test asks whether an EU
+country is on the list, and Digital Zone posts its Senior SRE for "United Arab
+Emirates" first and "Poland" last.
 
 **`--min-score <n>` is a print-time cutoff, applied after ranking.** Everything
 fetched is still recorded as seen and everything selected is still ranked; only

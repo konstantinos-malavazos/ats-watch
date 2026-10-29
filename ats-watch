@@ -131,7 +131,7 @@ async function main() {
   } else {
     const profile = await loadProfile(log);
     try {
-      ranks = await rankJobs(selected, profile, { log });
+      ranks = await rankJobs(selected, profile, { log, variants });
     } catch (err) {
       // Belt and braces: rankJobs is documented not to throw, but a broken
       // ranker must never lose the day's jobs.
