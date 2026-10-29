@@ -109,6 +109,22 @@ describe('buildUserPrompt()', () => {
     assert.ok(!prompt.includes('x'.repeat(5000)));
     assert.ok(prompt.includes('...'));
   });
+
+  test('a role listed in several countries is sent with all of them', () => {
+    // Digital Zone posts one Senior SRE per country; the UAE copy came first.
+    const jobs = [makeJob({ id: 'sre', location: 'United Arab Emirates', remote: true })];
+    const variants = new Map([['sre', { count: 3, locations: ['United Arab Emirates', 'Egypt', 'Poland'] }]]);
+    const prompt = buildUserPrompt('profile', jobs, variants);
+    const postings = JSON.parse(prompt.slice(prompt.indexOf('['), prompt.lastIndexOf(']') + 1));
+    assert.equal(postings[0].location, 'United Arab Emirates; Egypt; Poland');
+  });
+
+  test('a role listed once keeps its own location', () => {
+    const jobs = [makeJob({ id: 'a', location: 'Berlin' })];
+    const prompt = buildUserPrompt('profile', jobs, new Map());
+    const postings = JSON.parse(prompt.slice(prompt.indexOf('['), prompt.lastIndexOf(']') + 1));
+    assert.equal(postings[0].location, 'Berlin');
+  });
 });
 
 describe('rankJobs()', () => {
@@ -362,6 +378,17 @@ describe('rankJobs()', () => {
     });
     const all = [...log.warns, ...log.errors, ...log.infos].join(' ');
     assert.ok(!all.includes('sk-super-secret-value'));
+  });
+
+  test('variants reach the request body', async () => {
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    const variants = new Map([['a', { count: 2, locations: ['Austin, TX', 'Warsaw, Poland'] }]]);
+    let body;
+    await rankJobs(jobs, 'profile', {
+      log: makeLog(), variants,
+      fetchImpl: async (_url, init) => { body = init.body; return reply(goodBody); },
+    });
+    assert.match(JSON.parse(body).messages[1].content, /Austin, TX; Warsaw, Poland/);
   });
 });
 
