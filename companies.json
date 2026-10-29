@@ -72,7 +72,7 @@
     },
     {
       "name": "Ledger",
-      "ats": "lever",
+      "ats": "ashby",
       "token": "ledger"
     },
     {
@@ -124,6 +124,26 @@
       "name": "Qonto",
       "ats": "ashby",
       "token": "qonto"
+    },
+    {
+      "name": "Careem",
+      "ats": "greenhouse",
+      "token": "careem"
+    },
+    {
+      "name": "Binance",
+      "ats": "greenhouse",
+      "token": "binance"
+    },
+    {
+      "name": "Bybit",
+      "ats": "greenhouse",
+      "token": "bybit"
+    },
+    {
+      "name": "Digital Zone",
+      "ats": "workable",
+      "token": "digital-zone"
     }
   ]
 }
