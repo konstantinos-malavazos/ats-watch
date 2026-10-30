@@ -149,7 +149,7 @@ surfaces as a failed source on stderr. Check the per-source counts on stderr
 after adding either.
 
 Fetching is polite by construction: strictly sequential requests, a ~1s delay
-between them, a real User-Agent, and a 15s per-request timeout. **One failing
+between them, a real User-Agent, and a 45s per-request timeout. **One failing
 source never aborts the run** — it degrades and reports the failure on stderr.
 
 ## Known gaps

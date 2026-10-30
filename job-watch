@@ -25,7 +25,8 @@ import { rankJobs } from './lib/rank.js';
 import { renderDigest, renderDiscord } from './lib/render.js';
 
 const REQUEST_DELAY_MS = 1000;
-const REQUEST_TIMEOUT_MS = 15000;
+// A slow feed, not a hang: SonarSource on Lever answers in ~23s.
+const REQUEST_TIMEOUT_MS = 45000;
 
 main().catch((err) => {
   process.stderr.write(`error: ${err && err.message ? err.message : err}\n`);

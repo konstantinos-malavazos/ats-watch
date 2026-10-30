@@ -55,7 +55,7 @@ const { failures } = await politeSequential(
     const adapter = adapterFor(company.ats);
     // An RSS adapter (format === 'rss') hands parse() the raw XML string.
     const fetchPayload = adapter.format === 'rss' ? getText : getJson;
-    const payload = await fetchPayload(adapter.buildUrl(company.token), { log, timeoutMs: 30000 });
+    const payload = await fetchPayload(adapter.buildUrl(company.token), { log, timeoutMs: 45000 });
     const jobs = adapter.parse(payload, company);
     report.push({ company, jobs, payload });
     return jobs;
