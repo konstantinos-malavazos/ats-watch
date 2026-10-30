@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       all:
-        description: 'Check every company (16 requests) instead of one per ATS (2)'
+        description: 'Check every source (35 requests) instead of one per kind (8)'
         type: boolean
         default: false
       dump:

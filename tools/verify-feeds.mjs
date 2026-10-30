@@ -10,9 +10,11 @@
 // A field that is empty on EVERY row is the signature of a wrong field name —
 // that is the failure this script exists to catch, and it exits non-zero for it.
 //
-// Polite by default: one board per ATS, sequentially, through the same client
-// the tool itself uses. Pass --all to check every company (sixteen requests at
-// other people's job boards — don't do that on a schedule).
+// Polite by default: one source per kind (eight requests), sequentially,
+// through the same client the tool itself uses. Pass --all to check every
+// source (35 requests at other people's feeds — don't do that on a schedule).
+// Either way a run spends one of Remotive's four API calls a day and Jobicy's
+// one poll an hour, the same allowance the daily run uses.
 //
 //   node tools/verify-feeds.mjs
 //   node tools/verify-feeds.mjs --all
@@ -37,7 +39,7 @@ const list = await loadSources(path.join(ROOT, 'sources.json'), log, {
   fallbackPath: path.join(ROOT, 'companies.json'),
 });
 
-// One per ATS unless --all, so a casual run costs two requests, not sixteen.
+// One per kind unless --all, so a casual run costs eight requests, not 35.
 const targets = all ? list : [...new Map(list.map((c) => [c.ats, c])).values()];
 if (!targets.length) {
   log.error('no sources configured');

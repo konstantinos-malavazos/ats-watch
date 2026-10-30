@@ -76,8 +76,8 @@ jobs:
       #
       # This deliberately points at an EMPTY sources file rather than the
       # repo's real one. CI must never hit live ATS endpoints: it would make
-      # every pull request fire sixteen requests at other people's job boards,
-      # and the assertion would depend on whatever those boards happen to be
+      # every pull request fire 35 requests at other people's feeds and boards,
+      # and the assertion would depend on whatever those sources happen to be
       # advertising today. Use tools/verify-feeds.mjs for live checks.
       - name: Silence is a valid successful run
         run: |
