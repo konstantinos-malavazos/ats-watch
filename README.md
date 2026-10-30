@@ -350,7 +350,7 @@ carry the old name):
 
 ```
 CRON_TZ=Europe/Athens
-0 14 * * * /home/kostas/code/ats-watch/tools/daily-run.sh >> ~/.local/state/ats-watch/cron.log 2>&1
+0 14 * * * /home/kostas/code/job-watch/tools/daily-run.sh >> ~/.local/state/ats-watch/cron.log 2>&1
 ```
 
 `CRON_TZ` matters: the host clock is UTC, so a bare `0 14` would drift by an
