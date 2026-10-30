@@ -1,13 +1,23 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCliArgs } from '../lib/args.js';
+import path from 'node:path';
+import { parseCliArgs, HELP_TEXT } from '../lib/args.js';
+
+describe('HELP_TEXT', () => {
+  test('names the tool job-watch and the --sources flag', () => {
+    assert.match(HELP_TEXT, /^Usage: job-watch /);
+    assert.match(HELP_TEXT, /--sources <path>/);
+  });
+});
 
 describe('parseCliArgs() defaults', () => {
   test('no flags -> sane defaults', () => {
     const opts = parseCliArgs([]);
     assert.equal(opts.dryRun, false);
     assert.equal(opts.since, null);
-    assert.ok(opts.companiesPath.endsWith('companies.json'));
+    assert.equal(path.basename(opts.sourcesPath), 'sources.json');
+    assert.equal(path.basename(opts.sourcesFallbackPath), 'companies.json');
+    assert.equal(path.dirname(opts.sourcesFallbackPath), path.dirname(opts.sourcesPath));
     assert.equal(opts.statePath, null);
     assert.equal(opts.limit, null);
     assert.equal(opts.quiet, false);
@@ -97,10 +107,24 @@ describe('unknown flags', () => {
   });
 });
 
-describe('--companies / --state', () => {
-  test('--companies overrides the default path', () => {
+describe('--sources / --state', () => {
+  test('--sources overrides the default path, and never falls back', () => {
+    const opts = parseCliArgs(['--sources', './somewhere/sources.json']);
+    assert.ok(opts.sourcesPath.endsWith('somewhere/sources.json'));
+    assert.equal(opts.sourcesFallbackPath, null);
+  });
+
+  // companies.json / --companies are the pre-rename names; a hand-typed
+  // command with the old flag keeps working.
+  test('the old --companies flag still works, as an alias of --sources', () => {
     const opts = parseCliArgs(['--companies', './somewhere/companies.json']);
-    assert.ok(opts.companiesPath.endsWith('somewhere/companies.json'));
+    assert.ok(opts.sourcesPath.endsWith('somewhere/companies.json'));
+    assert.equal(opts.sourcesFallbackPath, null);
+  });
+
+  test('--sources wins when both flags are given', () => {
+    const opts = parseCliArgs(['--companies', './old.json', '--sources', './new.json']);
+    assert.ok(opts.sourcesPath.endsWith('new.json'));
   });
 
   test('--state overrides the default (null) state path', () => {

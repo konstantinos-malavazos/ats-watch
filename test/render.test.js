@@ -297,3 +297,79 @@ describe('re-listing counts', () => {
     assert.doesNotMatch(renderDiscord(jobs, null, null), /also listed/);
   });
 });
+
+describe('board attribution ("via <board>")', () => {
+  const board = (overrides = {}) => makeJob({
+    ats: 'jobicy', company: 'Proxify', company_token: 'proxify', location: 'Europe',
+    remote: true, url: 'https://jobicy.com/jobs/1', ...overrides,
+  });
+
+  test('text digest: "Title - Company via Board (where)" on a board row only', () => {
+    const out = renderDigest([board({ id: 'b' }), makeJob({ id: 'g', title: 'Feed Role' })], null);
+    assert.match(out, /^Engineer - Proxify via Jobicy \(/m);
+    assert.match(out, /^Feed Role - Acme \(Austin, TX\)$/m);
+    assert.equal((out.match(/ via /g) || []).length, 1, 'only the board row carries "via"');
+  });
+
+  test('Discord meta line: "Company via Board · where · salary" on a board row only', () => {
+    const out = renderDiscord([
+      board({ id: 'b', salary: '$100k - $120k' }),
+      makeJob({ id: 'g', title: 'Feed Role' }),
+    ], null);
+    assert.match(out, /^Proxify via Jobicy · .+ · \$100k - \$120k$/m);
+    assert.match(out, /^Acme · /m);
+    assert.equal((out.match(/ via /g) || []).length, 1, 'only the board row carries "via"');
+  });
+
+  test('every board gets its own label', () => {
+    const out = renderDigest([
+      board({ id: 'a', ats: 'remotive' }),
+      board({ id: 'b', ats: 'workingnomads' }),
+      board({ id: 'c', ats: 'weworkremotely' }),
+    ], null);
+    assert.ok(out.includes('Proxify via Remotive'));
+    assert.ok(out.includes('Proxify via Working Nomads'));
+    assert.ok(out.includes('Proxify via We Work Remotely'));
+  });
+
+  test('an unnamed posting prints "(company not listed) via <board>"', () => {
+    const job = board({ id: 'u', ats: 'weworkremotely', company: '(company not listed)', company_token: '_unlisted-u' });
+    assert.match(renderDigest([job], null), /Engineer - \(company not listed\) via We Work Remotely/);
+    assert.match(renderDiscord([job], null), /^\(company not listed\) via We Work Remotely/m);
+  });
+
+  test('many long board rows: within BUDGET, whole entries, correct "+N more"', () => {
+    const ranks = new Map();
+    const jobs = Array.from({ length: 40 }, (_, i) => {
+      const id = `b${i}`;
+      ranks.set(id, { score: 7, rationale: 'R'.repeat(200), red_flags: ['flag'] });
+      return board({
+        id, ats: 'weworkremotely', ats_job_id: String(i), company: `Company Number ${i} International`,
+        title: `Senior Backend Platform Engineer ${i}`, salary: '$150,000 - $190,000',
+        url: `https://weworkremotely.com/remote-jobs/role-${i}`,
+      });
+    });
+    const out = renderDigest(jobs, ranks);
+    assert.ok(out.length <= BUDGET, `length ${out.length} exceeds BUDGET ${BUDGET}`);
+    const m = out.match(/\n\+(\d+) more$/);
+    assert.ok(m, 'expected a "+N more" tail');
+    const shown = (out.match(/https:\/\/weworkremotely\.com\/remote-jobs\//g) || []).length;
+    const headlines = (out.match(/ via We Work Remotely/g) || []).length;
+    assert.equal(shown, headlines, 'every printed entry is whole: headline and URL together');
+    assert.equal(shown + Number(m[1]), jobs.length);
+  });
+
+  test('renderDiscordChunks keeps each board block whole', () => {
+    const jobs = Array.from({ length: 30 }, (_, i) => board({
+      id: `b${i}`, ats_job_id: String(i), title: `Role ${i}`, company: `Co ${i}`, salary: '$1 - $2',
+      url: `https://jobicy.com/jobs/${i}`,
+    }));
+    const chunks = renderDiscordChunks(renderDiscord(jobs, null), 400);
+    assert.ok(chunks.length > 1, 'should have split');
+    for (let i = 0; i < 30; i++) {
+      const holder = chunks.filter((c) => c.includes(`jobicy.com/jobs/${i}>`));
+      assert.equal(holder.length, 1, `role ${i} should be in exactly one chunk`);
+      assert.ok(holder[0].includes(`Co ${i} via Jobicy`), `role ${i} split from its meta line`);
+    }
+  });
+});

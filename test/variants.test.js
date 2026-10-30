@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { collapseVariants, baseTitle } from '../lib/variants.js';
+import { boardCompany } from '../lib/schema.js';
 
 function makeJob(overrides = {}) {
   return {
@@ -36,6 +37,26 @@ describe('baseTitle()', () => {
 });
 
 describe('collapseVariants()', () => {
+  test('board rows: same board and title at different companies stay apart', () => {
+    const jobs = [
+      makeJob({ id: 'a', ats: 'jobicy', ats_job_id: '1', title: 'Backend Engineer', ...boardCompany('Proxify', '1') }),
+      makeJob({ id: 'b', ats: 'jobicy', ats_job_id: '2', title: 'Backend Engineer', ...boardCompany('Lemon.io', '2') }),
+    ];
+    const { jobs: out, variants } = collapseVariants(jobs);
+    assert.equal(out.length, 2);
+    assert.equal(variants.size, 0);
+  });
+
+  test('board rows: two unnamed postings with the same title never collapse', () => {
+    const jobs = [
+      makeJob({ id: 'a', ats: 'weworkremotely', ats_job_id: 'x', title: 'Backend Engineer', ...boardCompany('', 'x') }),
+      makeJob({ id: 'b', ats: 'weworkremotely', ats_job_id: 'y', title: 'Backend Engineer', ...boardCompany('', 'y') }),
+    ];
+    const { jobs: out, variants } = collapseVariants(jobs);
+    assert.equal(out.length, 2);
+    assert.equal(variants.size, 0);
+  });
+
   test('collapses one role listed per country, keeping the first', () => {
     const jobs = [
       makeJob({ id: 'a', ats_job_id: 'a', title: 'Principal PM | Spain', location: 'Spain' }),

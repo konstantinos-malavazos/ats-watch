@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm test                                  # the whole suite (node --test "test/*.test.js")
 node --test test/rank.test.js             # one file
 node --test --test-name-pattern "budget"  # one test by name
-./ats-watch --dry-run --limit 5           # a real run that writes no state
-node tools/verify-feeds.mjs --all         # live field-coverage check, every board
+./job-watch --dry-run --limit 5           # a real run that writes no state
+node tools/verify-feeds.mjs --all         # live field-coverage check, every source
 node tools/verify-feeds.mjs --dump        # print a raw posting, for adding a mapping
 ```
 
@@ -37,7 +37,7 @@ These are enforced by CI (`.github/workflows/ci.yml`), not just convention:
 
 ## Architecture
 
-One pipeline, in `ats-watch` (the executable entry point), each stage a pure
+One pipeline, in `job-watch` (the executable entry point), each stage a pure
 module in `lib/`:
 
 ```
@@ -51,20 +51,65 @@ drops anything an adapter invented. Nothing downstream may add fields. It also
 owns the shared helpers adapters lean on: `toIso`, `htmlToText`, `looksRemote`,
 `formatSalary`.
 
-**Adapters** (`lib/adapters/`) are one module per ATS — greenhouse, lever,
-ashby, workable — each exporting `ats`, `buildUrl`, `parse(payload, company)`
+**Adapters** (`lib/adapters/`) are one module per source kind — the company
+feeds greenhouse, lever, ashby, workable, and the boards jobicy, remotive,
+workingnomads, weworkremotely — each exporting `ats`, `buildUrl`, `parse(payload, company)`
 and `fetchJobs(company, opts)`. `parse` is pure and network-free so it can run
 against a fixture; all network lives in `fetchJobs` via `lib/http.js`.
 `lib/adapters/index.js` is the only registry — `adapterFor()` is what makes
-`companies.json` validation and the fetch loop fail identically for an unknown
+`sources.json` validation (`lib/sources.js`) and the fetch loop fail identically for an unknown
 ATS.
 
-**Dedupe key is `(ats, company_token, ats_job_id)`** — the immutable board
-token, not the display name, so renaming a company in `companies.json` doesn't
+**A `sources.json` entry is a source, of one of two kinds. Keep the terms
+apart.** A *company careers feed* (greenhouse, lever, ashby, workable) is one
+company's own ATS listing: the entry's `name` is the company and its `token`
+is the immutable feed token. A *board source* (jobicy, remotive, workingnomads,
+weworkremotely) is a third-party remote-job board listing many companies, so
+the entry's `name` and `token` only say which board and which query or
+category; they never reach a row. A board adapter takes `company` from the
+posting and sets `company_token = companySlug(company)` via `boardCompany()`
+in `lib/schema.js`, so the dedupe key and the re-listing collapse stay
+per company. A posting with no company name is kept as `(company not listed)`
+with the token `_unlisted-<ats_job_id>` — unique per posting, so two unnamed
+roles never collapse, and never credited to the board. The renderers print
+board attribution from `job.ats` (`BOARDS`, `boardLabel()`), not from a
+thirteenth field: `Title - Company via Board (where)` in the digest,
+`Company via Board · where · salary` in Discord. The same marketplace posting
+on several boards (Lemon.io, Proxify) is reported once per board; that is
+accepted.
+
+Board terms and limits, as read on 2026-10-30 (STATUS lines in each adapter
+carry the detail). **Remotive**: at most 4 API calls a day, a 24h delay on
+listings, attribution required; its `robots.txt` says `Disallow: /api/*`, which
+conflicts with the API docs, and the docs were followed — so every live run of
+the Remotive entry spends one of the four, and `publication_date` has no
+offset and is read as UTC. **Jobicy**: at most one poll an hour, attribution
+required; the entry is `geo=greece&industry=engineering`, one page of 50 (`dev`
+is deprecated). **Working Nomads**: no published API terms found; `pub_date`
+carries a US Eastern offset (`-04:00`, `-05:00` after the clocks change).
+**We Work Remotely**: RSS read through `getText()`, one entry per category;
+`region` is unreliable (114 of 121 items said "Anywhere in the World"), so
+residency is left to the ranker reading the description. The timezone traps
+are pinned by tests: Remotive's offset-less date under `TZ=America/New_York`,
+and Working Nomads' `-04:00` and `-05:00` offsets. Run
+`TZ=America/New_York node --test "test/*.test.js"` after touching date code.
+
+**After adding a board entry, do a seed run — not `--dry-run`, which skips the
+state write — before the next cron run.** A new board lists weeks of postings
+no state has seen, and the daily run would post the whole backlog. Seed with
+`./job-watch --sources <file with only the new board> --no-rank --quiet`,
+output not piped to Discord, after copying the state file aside
+(`.job-watch-state.json`, or `.ats-watch-state.json` until the first run under
+the new name has written it). If
+anything that forms a board key changes later (`companySlug`, `boardCompany`,
+an adapter's `ats_job_id`), restore the copy and seed again.
+
+**Dedupe key is `(ats, company_token, ats_job_id)`** — the immutable feed
+token, not the display name, so renaming a company in `sources.json` doesn't
 make all its postings look new. A job is new iff that tuple is absent from
 state; a changed title or date does not make it new.
 
-**State is written before ranking** (`ats-watch:102`), so a ranker failure can't
+**State is written before ranking** (`job-watch:124`), so a ranker failure can't
 cause the same jobs to be reported as new tomorrow. `selectNew()` is pure and
 returns the next state rather than mutating, which is what makes that correct.
 
@@ -72,11 +117,11 @@ returns the next state rather than mutating, which is what makes that correct.
 than `PRUNE_AFTER_DAYS` (90) is dropped, so filled postings don't accumulate
 forever. Only entries absent from *this* run are candidates — everything the run
 saw has `last_seen === now` — so the window is 90 consecutive days off the
-board, which is the margin that keeps a failing feed from re-reporting its whole
+feed, which is the margin that keeps a failing feed from re-reporting its whole
 backlog as new.
 
 **The title filter runs before the ranker** (`lib/filter.js`, `titleVerdict`).
-Roughly two thirds of what these boards publish is sales, marketing,
+Roughly two thirds of what the company careers feeds publish is sales, marketing,
 recruitment, finance or customer success, and it used to cost a ranking each.
 The rules are ordered and the last one decides the design: go-to-market titles
 drop first (a Sales Engineer is not an engineer), an engineering word then
@@ -92,7 +137,7 @@ drops by mistake is fixed in `ENGINEERING_RE`, not by narrowing the exclusion.
 `--no-title-filter` turns it off.
 
 **Re-listings are collapsed per run, never in state** (`lib/variants.js`).
-Boards publish one opening once per country, each with its own `ats_job_id`, so
+Company careers feeds publish one opening once per country, each with its own `ats_job_id`, so
 the dedupe tuple cannot see it — 1247 of those same 3497 rows were re-listings.
 `collapseVariants()` groups on `(ats, company_token, baseTitle)` and returns a
 side map of counts, which the renderers print as "also listed in N other
@@ -143,6 +188,20 @@ JSON shape — returns `null`, which the pipeline prints as the unranked list
 while exiting 0. `parseRankingResponse` is deliberately forgiving: code fences,
 prose around the JSON, and a bare array instead of the wrapper all recover.
 
+**Renamed from ats-watch.** Every old name is still read when the new one is
+absent, so an un-migrated machine reports nothing twice: the state file
+`.job-watch-state.json` falls back to `.ats-watch-state.json` (read only —
+`statePathsFor()` / `loadState()` in `lib/store.js`; an explicit `--state`
+never falls back, and the old file is never written or deleted); `sources.json`
+falls back to `companies.json` (`lib/sources.js`; an explicit `--sources` never
+falls back) and `--companies` is an alias of `--sources`; every `JOB_WATCH_*`
+variable falls back to its `ATS_WATCH_*` twin through `envVar()` in
+`lib/env.js`, new name first; `tools/daily-run.sh` reads `JOB_WATCH_ENV`, then
+`ATS_WATCH_ENV`, then `~/.config/job-watch/env` if it exists, then
+`~/.config/ats-watch/env`. Read env vars through `envVar()`, never
+`process.env.JOB_WATCH_*` directly. The fallbacks stay until a cleanup ticket
+removes them.
+
 ## Working on this codebase
 
 **Verify an endpoint or field name against a live response before writing code
@@ -163,9 +222,9 @@ a test, because they misfire and no posting needed them.
 
 The ranker's model is a reasoning model: hidden reasoning tokens come out of
 `max_tokens` before any content is emitted, and a large batch takes minutes.
-Both are env-tunable (`ATS_WATCH_LLM_MAX_TOKENS`, `ATS_WATCH_LLM_TIMEOUT_MS`).
+Both are env-tunable (`JOB_WATCH_LLM_MAX_TOKENS`, `JOB_WATCH_LLM_TIMEOUT_MS`).
 The selection is sent in batches of at most 20 postings
-(`ATS_WATCH_LLM_BATCH_SIZE`), one request at a time. Larger batches make the
+(`JOB_WATCH_LLM_BATCH_SIZE`), one request at a time. Larger batches make the
 model drop entries — it returns well-formed JSON with fewer rankings than
 postings, which `parseRankingResponse` cannot detect, because a short map
 parses exactly like a complete one. Observed repeatedly at 30. Scores are
@@ -190,6 +249,6 @@ unranked job walks past `--min-score` by design: on 2026-09-03 a truncated
 announcing one. `renderDiscord()` now counts those as "N unranked" in its
 header, so the header never leaves a role beneath it unaccounted for.
 
-CI never touches live ATS endpoints; that would fire twenty-five requests at
-other people's job boards on every pull request. Live checks are the manual
+CI never touches live endpoints; that would fire a request at every company
+careers feed and board source on every pull request. Live checks are the manual
 `Verify feeds` workflow and `tools/verify-feeds.mjs`.

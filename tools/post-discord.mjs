@@ -4,7 +4,7 @@
 // Reads the digest on stdin, so it composes with the pipeline the same way
 // everything else here does:
 //
-//   ats-watch --format discord | tools/post-discord.mjs
+//   job-watch --format discord | tools/post-discord.mjs
 //
 // Discord caps a message at 2000 characters. Rather than truncating - which
 // is the bug this replaced, where half the roles vanished behind "+N more" -
@@ -15,8 +15,10 @@
 // disappearing.
 
 import { renderDiscordChunks } from '../lib/render.js';
+import { envVar } from '../lib/env.js';
 
-const webhook = process.env.ATS_WATCH_DISCORD_WEBHOOK;
+// JOB_WATCH_DISCORD_WEBHOOK, or the pre-rename ATS_WATCH_DISCORD_WEBHOOK.
+const webhook = envVar('DISCORD_WEBHOOK');
 const TIMEOUT_MS = 30000;
 /** Discord's webhook bucket is tight; a beat between messages avoids 429s. */
 const GAP_MS = 700;
@@ -63,7 +65,7 @@ if (!digest.trim()) {
 }
 
 if (!webhook) {
-  process.stderr.write('error: ATS_WATCH_DISCORD_WEBHOOK not set - digest not posted:\n');
+  process.stderr.write('error: JOB_WATCH_DISCORD_WEBHOOK not set - digest not posted:\n');
   process.stderr.write(`${digest}\n`);
   process.exit(1);
 }

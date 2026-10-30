@@ -128,8 +128,10 @@ describe('buildUserPrompt()', () => {
 });
 
 describe('rankJobs()', () => {
-  const KEY_VARS = ['ATS_WATCH_LLM_API_KEY', 'DEEPSEEK_API_KEY'];
-  const CFG_VARS = ['ATS_WATCH_LLM_BASE_URL', 'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS', 'ATS_WATCH_LLM_TIMEOUT_MS', 'ATS_WATCH_LLM_BATCH_SIZE'];
+  // Both prefixes (job-watch was ats-watch), so a developer's env cannot leak in.
+  const KEY_VARS = ['JOB_WATCH_LLM_API_KEY', 'ATS_WATCH_LLM_API_KEY', 'DEEPSEEK_API_KEY'];
+  const CFG_VARS = ['BASE_URL', 'MODEL', 'MAX_TOKENS', 'TIMEOUT_MS', 'BATCH_SIZE']
+    .flatMap((s) => [`JOB_WATCH_LLM_${s}`, `ATS_WATCH_LLM_${s}`]);
   let saved;
 
   beforeEach(() => {
@@ -184,8 +186,43 @@ describe('rankJobs()', () => {
     assert.match(log.warns[0], /API_KEY/);
   });
 
+  test('the key is read from JOB_WATCH_LLM_API_KEY', async () => {
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-new';
+    let auth;
+    const result = await rankJobs(jobs, 'profile', {
+      log: makeLog(), fetchImpl: async (_u, init) => { auth = init.headers.authorization; return reply(goodBody); },
+    });
+    assert.ok(result instanceof Map);
+    assert.equal(auth, 'Bearer sk-new');
+  });
+
+  test('JOB_WATCH_LLM_API_KEY wins over the old ATS_WATCH_LLM_API_KEY', async () => {
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-new';
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-old';
+    let auth;
+    await rankJobs(jobs, 'profile', {
+      log: makeLog(), fetchImpl: async (_u, init) => { auth = init.headers.authorization; return reply(goodBody); },
+    });
+    assert.equal(auth, 'Bearer sk-new');
+  });
+
+  test('the old ATS_WATCH_LLM_API_KEY still works when the new name is unset', async () => {
+    process.env.ATS_WATCH_LLM_API_KEY = 'sk-old';
+    let auth;
+    await rankJobs(jobs, 'profile', {
+      log: makeLog(), fetchImpl: async (_u, init) => { auth = init.headers.authorization; return reply(goodBody); },
+    });
+    assert.equal(auth, 'Bearer sk-old');
+  });
+
+  test('the no-key warning names the new JOB_WATCH_LLM_API_KEY', async () => {
+    const log = makeLog();
+    await rankJobs(jobs, 'profile', { log, fetchImpl: async () => reply(goodBody) });
+    assert.match(log.warns[0], /JOB_WATCH_LLM_API_KEY/);
+  });
+
   test('happy path returns a Map of rankings', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     const log = makeLog();
     const result = await rankJobs(jobs, 'profile', { log, fetchImpl: async () => reply(goodBody) });
     assert.ok(result instanceof Map);
@@ -196,8 +233,8 @@ describe('rankJobs()', () => {
   });
 
   test('sends bearer auth, the configured model, and both prompt roles', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-secret';
-    process.env.ATS_WATCH_LLM_MODEL = 'deepseek-v4-pro';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-secret';
+    process.env.JOB_WATCH_LLM_MODEL = 'deepseek-v4-pro';
     let seenUrl, seenInit;
     await rankJobs(jobs, 'MY PROFILE', {
       log: makeLog(),
@@ -214,8 +251,8 @@ describe('rankJobs()', () => {
   });
 
   test('respects a custom base URL and strips its trailing slash', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
-    process.env.ATS_WATCH_LLM_BASE_URL = 'http://localhost:8080/';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_BASE_URL = 'http://localhost:8080/';
     let seenUrl;
     await rankJobs(jobs, 'p', {
       log: makeLog(),
@@ -240,7 +277,7 @@ describe('rankJobs()', () => {
   // answer gets spent entirely on reasoning and returns empty content - which
   // is exactly what the first real run against the live API did.
   test('token budget leaves headroom for reasoning tokens', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     let seenInit;
     await rankJobs(jobs, 'p', {
       log: makeLog(),
@@ -251,9 +288,9 @@ describe('rankJobs()', () => {
     assert.ok(max_tokens >= 2560, `budget ${max_tokens} leaves no reasoning headroom`);
   });
 
-  test('ATS_WATCH_LLM_MAX_TOKENS overrides the computed budget', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
-    process.env.ATS_WATCH_LLM_MAX_TOKENS = '1234';
+  test('JOB_WATCH_LLM_MAX_TOKENS overrides the computed budget', async () => {
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_MAX_TOKENS = '1234';
     let seenInit;
     await rankJobs(jobs, 'p', {
       log: makeLog(),
@@ -265,7 +302,7 @@ describe('rankJobs()', () => {
   // The first real 23-job run took 2m37s: a reasoning model on a large batch
   // blows straight through a one-minute timeout.
   test('timeout is generous by default and env-overridable', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     let seenSignal;
     await rankJobs(jobs, 'p', {
       log: makeLog(),
@@ -273,7 +310,7 @@ describe('rankJobs()', () => {
     });
     assert.ok(seenSignal instanceof AbortSignal);
 
-    process.env.ATS_WATCH_LLM_TIMEOUT_MS = '1';
+    process.env.JOB_WATCH_LLM_TIMEOUT_MS = '1';
     const log = makeLog();
     const result = await rankJobs(jobs, 'p', {
       log,
@@ -284,7 +321,7 @@ describe('rankJobs()', () => {
   });
 
   test('budget exhausted by reasoning -> null, and says so', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     const log = makeLog();
     const result = await rankJobs(jobs, 'p', {
       log,
@@ -301,7 +338,7 @@ describe('rankJobs()', () => {
   // Every failure below must return null rather than throw: a broken ranker
   // must never lose the day's jobs.
   test('non-2xx -> null, logs the status', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     const log = makeLog();
     const result = await rankJobs(jobs, 'p', {
       log,
@@ -312,7 +349,7 @@ describe('rankJobs()', () => {
   });
 
   test('network throw -> null, does not reject', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     const log = makeLog();
     const result = await rankJobs(jobs, 'p', {
       log, fetchImpl: async () => { throw new Error('ECONNREFUSED'); },
@@ -322,7 +359,7 @@ describe('rankJobs()', () => {
   });
 
   test('timeout -> null with a timeout message', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     const log = makeLog();
     const result = await rankJobs(jobs, 'p', {
       log,
@@ -333,7 +370,7 @@ describe('rankJobs()', () => {
   });
 
   test('unparseable model output -> null', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     const log = makeLog();
     const result = await rankJobs(jobs, 'p', {
       log, fetchImpl: async () => reply('I am afraid I cannot do that.'),
@@ -343,7 +380,7 @@ describe('rankJobs()', () => {
   });
 
   test('empty message content -> null', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     const log = makeLog();
     const result = await rankJobs(jobs, 'p', {
       log, fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ choices: [] }) }),
@@ -352,7 +389,7 @@ describe('rankJobs()', () => {
   });
 
   test('empty job list -> null without a request', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     let called = false;
     const result = await rankJobs([], 'p', {
       log: makeLog(), fetchImpl: async () => { called = true; return reply(goodBody); },
@@ -362,7 +399,7 @@ describe('rankJobs()', () => {
   });
 
   test('partial scoring warns but still returns what it got', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     const log = makeLog();
     const partial = JSON.stringify({ rankings: [{ id: 'a', score: 7, rationale: 'ok', red_flags: [] }] });
     const result = await rankJobs(jobs, 'p', { log, fetchImpl: async () => reply(partial) });
@@ -371,7 +408,7 @@ describe('rankJobs()', () => {
   });
 
   test('the API key never reaches the logger', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-super-secret-value';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-super-secret-value';
     const log = makeLog();
     await rankJobs(jobs, 'p', {
       log, fetchImpl: async () => ({ ok: false, status: 500, text: async () => 'boom' }),
@@ -381,7 +418,7 @@ describe('rankJobs()', () => {
   });
 
   test('variants reach the request body', async () => {
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
     const variants = new Map([['a', { count: 2, locations: ['Austin, TX', 'Warsaw, Poland'] }]]);
     let body;
     await rankJobs(jobs, 'profile', {
@@ -410,17 +447,15 @@ describe('salary reaches the ranker', () => {
 });
 
 describe('rankJobs() batching', () => {
-  const CFG_VARS = [
-    'ATS_WATCH_LLM_API_KEY', 'DEEPSEEK_API_KEY', 'ATS_WATCH_LLM_BASE_URL',
-    'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS', 'ATS_WATCH_LLM_TIMEOUT_MS',
-    'ATS_WATCH_LLM_BATCH_SIZE',
-  ];
+  // Both prefixes (job-watch was ats-watch), so a developer's env cannot leak in.
+  const CFG_VARS = ['DEEPSEEK_API_KEY', ...['API_KEY', 'BASE_URL', 'MODEL', 'MAX_TOKENS', 'TIMEOUT_MS', 'BATCH_SIZE']
+    .flatMap((s) => [`JOB_WATCH_LLM_${s}`, `ATS_WATCH_LLM_${s}`])];
   let saved;
 
   beforeEach(() => {
     saved = {};
     for (const k of CFG_VARS) { saved[k] = process.env[k]; delete process.env[k]; }
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
   });
 
   afterEach(() => {
@@ -486,11 +521,19 @@ describe('rankJobs() batching', () => {
     assert.equal(sizes.reduce((a, b) => a + b, 0), 45, 'no posting sent twice');
   });
 
-  test('ATS_WATCH_LLM_BATCH_SIZE overrides the default', async () => {
+  test('the old ATS_WATCH_LLM_BATCH_SIZE still overrides the default', async () => {
     process.env.ATS_WATCH_LLM_BATCH_SIZE = '5';
     const sizes = [];
     await rankJobs(manyJobs(12), 'p', { log: makeLog(), fetchImpl: scoringFetch(sizes) });
     assert.deepEqual(sizes, [5, 5, 2]);
+  });
+
+  test('JOB_WATCH_LLM_BATCH_SIZE wins over the old ATS_WATCH_LLM_BATCH_SIZE', async () => {
+    process.env.JOB_WATCH_LLM_BATCH_SIZE = '4';
+    process.env.ATS_WATCH_LLM_BATCH_SIZE = '5';
+    const sizes = [];
+    await rankJobs(manyJobs(9), 'p', { log: makeLog(), fetchImpl: scoringFetch(sizes) });
+    assert.deepEqual(sizes, [4, 4, 1]);
   });
 
   test('one failing batch does not sink the others', async () => {
@@ -558,17 +601,15 @@ describe('rankJobs() batching', () => {
 // day's last batch of 8 was cut off, and because rankJobs gave up on it, all 8
 // jobs printed unranked - which walked them straight past --min-score 7.
 describe('rankJobs() split-on-truncation', () => {
-  const CFG_VARS = [
-    'ATS_WATCH_LLM_API_KEY', 'DEEPSEEK_API_KEY', 'ATS_WATCH_LLM_BASE_URL',
-    'ATS_WATCH_LLM_MODEL', 'ATS_WATCH_LLM_MAX_TOKENS', 'ATS_WATCH_LLM_TIMEOUT_MS',
-    'ATS_WATCH_LLM_BATCH_SIZE',
-  ];
+  // Both prefixes (job-watch was ats-watch), so a developer's env cannot leak in.
+  const CFG_VARS = ['DEEPSEEK_API_KEY', ...['API_KEY', 'BASE_URL', 'MODEL', 'MAX_TOKENS', 'TIMEOUT_MS', 'BATCH_SIZE']
+    .flatMap((s) => [`JOB_WATCH_LLM_${s}`, `ATS_WATCH_LLM_${s}`])];
   let saved;
 
   beforeEach(() => {
     saved = {};
     for (const k of CFG_VARS) { saved[k] = process.env[k]; delete process.env[k]; }
-    process.env.ATS_WATCH_LLM_API_KEY = 'sk-test';
+    process.env.JOB_WATCH_LLM_API_KEY = 'sk-test';
   });
 
   afterEach(() => {
@@ -731,7 +772,7 @@ describe('rankJobs() split-on-truncation', () => {
         text: async () => '',
       };
     };
-    process.env.ATS_WATCH_LLM_BATCH_SIZE = '8';
+    process.env.JOB_WATCH_LLM_BATCH_SIZE = '8';
     await rankJobs(manyJobs(8), 'p', { log: makeLog(), fetchImpl: capture });
     // 2048 headroom + 300/job reasoning + 512 + 400/job answer.
     assert.equal(budgets[0], 2048 + 300 * 8 + 512 + 400 * 8);

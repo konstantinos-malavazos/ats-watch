@@ -144,6 +144,36 @@
       "name": "Digital Zone",
       "ats": "workable",
       "token": "digital-zone"
+    },
+    {
+      "name": "Jobicy",
+      "ats": "jobicy",
+      "token": "count=50&geo=greece&industry=engineering"
+    },
+    {
+      "name": "Remotive",
+      "ats": "remotive",
+      "token": "software-dev"
+    },
+    {
+      "name": "Working Nomads",
+      "ats": "workingnomads",
+      "token": "all"
+    },
+    {
+      "name": "We Work Remotely (back-end)",
+      "ats": "weworkremotely",
+      "token": "remote-back-end-programming-jobs"
+    },
+    {
+      "name": "We Work Remotely (full-stack)",
+      "ats": "weworkremotely",
+      "token": "remote-full-stack-programming-jobs"
+    },
+    {
+      "name": "We Work Remotely (devops)",
+      "ats": "weworkremotely",
+      "token": "remote-devops-sysadmin-jobs"
     }
   ]
 }

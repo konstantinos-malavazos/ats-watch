@@ -1,8 +1,14 @@
-# ats-watch
+# job-watch
 
-A personal daily job watcher. Pulls open roles from public, unauthenticated ATS
-feeds, keeps the ones it has never seen before, and has an LLM rank them
-against your profile.
+A personal daily job watcher. Pulls open roles from public, unauthenticated
+company careers feeds (ATS) and remote-job boards, keeps the ones it has never
+seen before, and has an LLM rank them against your profile.
+
+Renamed from **ats-watch**. Everything the old name used is still read when
+the new one is absent: `.ats-watch-state.json`, `companies.json`, the
+`--companies` flag, every `ATS_WATCH_*` variable, `ATS_WATCH_ENV` and
+`~/.config/ats-watch/env`. The new name always wins when both exist, and
+nothing old is moved, rewritten or deleted.
 
 Personal use only. No auth, no scraping of logged-in sites, no republishing.
 
@@ -20,23 +26,24 @@ Node >= 22.13.0. **Zero npm dependencies** — nothing is installed at runtime,
 which is what makes this safe to run in a container with an ephemeral writable
 layer.
 
-State is a plain JSON file (`.ats-watch-state.json`), not `node:sqlite`. See
+State is a plain JSON file (`.job-watch-state.json`; the pre-rename
+`.ats-watch-state.json` is read until the new file exists), not `node:sqlite`. See
 **Why not node:sqlite** below.
 
 ## Usage
 
 ```
-./ats-watch                    # normal run: print a digest of new roles
-node ./ats-watch               # identical; both invocation styles work
-./ats-watch --dry-run          # fetch and rank, write no state
-./ats-watch --since 7d         # only roles posted in the last week
-./ats-watch --since 2026-01-15 # ISO dates work too
-./ats-watch --limit 10         # cap the digest
-./ats-watch --min-score 7      # only print roles the ranker scored 7+
-./ats-watch --no-title-filter  # send sales/back-office titles to the ranker too
-./ats-watch --no-rank          # skip ranking, print the unranked list
-./ats-watch --quiet            # suppress info-level stderr chatter
-./ats-watch --help
+./job-watch                    # normal run: print a digest of new roles
+node ./job-watch               # identical; both invocation styles work
+./job-watch --dry-run          # fetch and rank, write no state
+./job-watch --since 7d         # only roles posted in the last week
+./job-watch --since 2026-01-15 # ISO dates work too
+./job-watch --limit 10         # cap the digest
+./job-watch --min-score 7      # only print roles the ranker scored 7+
+./job-watch --no-title-filter  # send sales/back-office titles to the ranker too
+./job-watch --no-rank          # skip ranking, print the unranked list
+./job-watch --quiet            # suppress info-level stderr chatter
+./job-watch --help
 ```
 
 ### stdout is the product
@@ -52,7 +59,9 @@ Exit codes: `0` success (including no news), `1` the run could not complete,
 
 ## Configuration
 
-`companies.json` — the boards to watch:
+`sources.json` — the sources to watch, company careers feeds and job boards
+(called `companies.json` before the rename, and still read under that name
+when `sources.json` is absent; `--sources <path>` points elsewhere):
 
 ```json
 { "companies": [ { "name": "Acme", "ats": "greenhouse", "token": "acme" } ] }
@@ -81,15 +90,18 @@ defaulting to DeepSeek:
 
 | Variable | Default | |
 |---|---|---|
-| `ATS_WATCH_LLM_API_KEY` | — | required; falls back to `DEEPSEEK_API_KEY` |
-| `ATS_WATCH_LLM_BASE_URL` | `https://api.deepseek.com` | |
-| `ATS_WATCH_LLM_MODEL` | `deepseek-v4-pro` | |
-| `ATS_WATCH_LLM_MAX_TOKENS` | `2560 + 400/job`, capped at 32768 | output budget; must cover reasoning tokens |
-| `ATS_WATCH_LLM_TIMEOUT_MS` | `300000` (5 min) | a reasoning model on a 20+ job batch takes minutes |
+| `JOB_WATCH_LLM_API_KEY` | — | required; falls back to `DEEPSEEK_API_KEY` |
+| `JOB_WATCH_LLM_BASE_URL` | `https://api.deepseek.com` | |
+| `JOB_WATCH_LLM_MODEL` | `deepseek-v4-pro` | |
+| `JOB_WATCH_LLM_MAX_TOKENS` | `2560 + 400/job`, capped at 32768 | output budget; must cover reasoning tokens |
+| `JOB_WATCH_LLM_TIMEOUT_MS` | `300000` (5 min) | a reasoning model on a 20+ job batch takes minutes |
+
+Each is also read under its pre-rename `ATS_WATCH_LLM_*` name when the
+`JOB_WATCH_LLM_*` one is unset.
 
 ```
 export DEEPSEEK_API_KEY=sk-...
-./ats-watch
+./job-watch
 ```
 
 The base URL and model were **confirmed against the live API on 2026-08-24**
@@ -102,11 +114,11 @@ Measured live, a five-job prompt burnt 750-1020 reasoning tokens on its own, so
 the output budget is sized to cover the reasoning pass and the answer. Set it
 too low and the response comes back with `finish_reason: "length"` and empty
 content, which degrades to the unranked list. If you swap in a non-reasoning
-model you can safely lower `ATS_WATCH_LLM_MAX_TOKENS`.
+model you can safely lower `JOB_WATCH_LLM_MAX_TOKENS`.
 
 **It is also slow.** A real 21-job batch took **2m37s** end to end. The timeout
 is set at five minutes on the assumption that a cron job would rather wait than
-lose the day's ranking. Lower `ATS_WATCH_LLM_TIMEOUT_MS` if you are running it
+lose the day's ranking. Lower `JOB_WATCH_LLM_TIMEOUT_MS` if you are running it
 interactively and would rather have the unranked list quickly.
 
 **Every ranker failure degrades to the unranked list**: no key, a network
@@ -213,7 +225,7 @@ interrupted run cannot leave a half-written state file.
 
 **Dedupe key** is `(ats, company_token, ats_job_id)`. The brief said
 `(ats, company, ats_job_id)`; this uses the immutable board token rather than
-the human display name, so renaming "Acme" to "Acme Inc." in `companies.json`
+the human display name, so renaming "Acme" to "Acme Inc." in `sources.json`
 does not make every one of its postings look brand new.
 
 **A job is new iff its tuple is absent from the state file.** A changed title
@@ -311,10 +323,14 @@ It is written for cron, which supplies no shell profile and no environment, so
 it loads everything it needs from a config file kept outside the repo:
 
 ```
-~/.config/ats-watch/env          (mode 600, override with ATS_WATCH_ENV)
-  ATS_WATCH_DISCORD_WEBHOOK=...  webhook URL for the target channel
+~/.config/job-watch/env          (mode 600, override with JOB_WATCH_ENV)
+  JOB_WATCH_DISCORD_WEBHOOK=...  webhook URL for the target channel
   DEEPSEEK_API_KEY=...           ranker key; absent means an unranked digest
 ```
+
+The pre-rename names still work: `ATS_WATCH_ENV`, then
+`~/.config/ats-watch/env` when `~/.config/job-watch/env` does not exist, and
+`ATS_WATCH_DISCORD_WEBHOOK` when `JOB_WATCH_DISCORD_WEBHOOK` is unset.
 
 Silence does **not** carry through to Discord. A bare run with nothing to say
 prints nothing, but the daily script posts a short "No jobs today" line in that
@@ -329,14 +345,15 @@ UTC in winter. That is deliberate: DeepSeek bills peak rates at 01:00–04:00 an
 runs off-peak on both sides of the DST change. The previous 09:00 Athens slot
 was 06:00 UTC — the start of the morning peak window.
 
-The installed schedule is 09:00 Europe/Athens:
+The installed schedule (the clone path and log path are the owner's, and still
+carry the old name):
 
 ```
 CRON_TZ=Europe/Athens
-0 9 * * * /home/kostas/code/ats-watch/tools/daily-run.sh >> ~/.local/state/ats-watch/cron.log 2>&1
+0 14 * * * /home/kostas/code/ats-watch/tools/daily-run.sh >> ~/.local/state/ats-watch/cron.log 2>&1
 ```
 
-`CRON_TZ` matters: the host clock is UTC, so a bare `0 9` would drift by an
+`CRON_TZ` matters: the host clock is UTC, so a bare `0 14` would drift by an
 hour at each DST changeover.
 
 ## Out of scope

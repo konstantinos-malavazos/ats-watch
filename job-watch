@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// ats-watch - personal daily job watcher over public ATS feeds.
+// job-watch - personal daily job watcher over company careers feeds and
+// remote-job boards. (Renamed from ats-watch: the old state file, sources
+// file and ATS_WATCH_* env vars are still read when the new ones are absent.)
 //
 // Pipeline: fetch -> normalise -> dedupe -> persist -> select first-seen
 //           -> filter -> collapse re-listings -> rank -> score cutoff -> print.
@@ -12,7 +14,8 @@
 import { readFile } from 'node:fs/promises';
 import { parseCliArgs, HELP_TEXT } from './lib/args.js';
 import { makeLogger } from './lib/log.js';
-import { loadState, saveState, defaultStatePath } from './lib/store.js';
+import { loadState, saveState, statePathsFor } from './lib/store.js';
+import { loadSources } from './lib/sources.js';
 import { selectNew, PRUNE_AFTER_DAYS } from './lib/seen.js';
 import { adapterFor } from './lib/adapters/index.js';
 import { politeSequential } from './lib/http.js';
@@ -46,9 +49,9 @@ async function main() {
   }
 
   const log = makeLogger({ quiet: opts.quiet });
-  const companies = await loadCompanies(opts.companiesPath, log);
+  const companies = await loadSources(opts.sourcesPath, log, { fallbackPath: opts.sourcesFallbackPath });
   if (!companies.length) {
-    log.warn(`no companies configured in ${opts.companiesPath} - nothing to do`);
+    log.warn(`no sources configured in ${opts.sourcesPath} - nothing to do`);
     return;
   }
 
@@ -79,8 +82,11 @@ async function main() {
   log.info(`fetched ${fetched.length} posting(s)`);
 
   // --- dedupe + first-seen ----------------------------------------------
-  const statePath = opts.statePath || defaultStatePath();
-  const state = await loadState(statePath);
+  // No --state: .job-watch-state.json, falling back to the pre-rename
+  // .ats-watch-state.json (read only; the save below goes to the new path).
+  // An explicit --state never falls back.
+  const { statePath, fallbackPath } = statePathsFor(opts.statePath);
+  const state = await loadState(statePath, { fallbackPath, log });
   const { fresh, nextState, counts } = selectNew(fetched, state);
   log.info(`unique ${counts.unique}, already known ${counts.known}, new ${counts.fresh}`);
   if (counts.pruned) {
@@ -158,45 +164,6 @@ async function main() {
     ? renderDiscord(printable, ranks, variants)
     : renderDigest(printable, ranks, variants);
   if (digest) process.stdout.write(`${digest}\n`);
-}
-
-async function loadCompanies(path, log) {
-  let text;
-  try {
-    text = await readFile(path, 'utf8');
-  } catch (err) {
-    if (err.code === 'ENOENT') {
-      log.warn(`no companies file at ${path}`);
-      return [];
-    }
-    throw err;
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    throw new Error(`companies file at ${path} is not valid JSON: ${err.message}`);
-  }
-
-  const list = Array.isArray(parsed) ? parsed : parsed && parsed.companies;
-  if (!Array.isArray(list)) {
-    throw new Error(`companies file at ${path} must be an array, or an object with a "companies" array`);
-  }
-
-  return list.filter((c) => {
-    if (!c || !c.ats || !c.token) {
-      log.warn(`skipping companies entry without ats/token: ${JSON.stringify(c)}`);
-      return false;
-    }
-    try {
-      adapterFor(c.ats);
-    } catch (err) {
-      log.warn(`skipping ${c.name || c.token}: ${err.message}`);
-      return false;
-    }
-    return true;
-  });
 }
 
 async function loadProfile(log) {

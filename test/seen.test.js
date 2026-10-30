@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { dedupe, selectNew, emptyState, PRUNE_AFTER_DAYS } from '../lib/seen.js';
 import * as greenhouse from '../lib/adapters/greenhouse.js';
 import * as lever from '../lib/adapters/lever.js';
+import * as jobicy from '../lib/adapters/jobicy.js';
+import * as remotive from '../lib/adapters/remotive.js';
+import * as workingnomads from '../lib/adapters/workingnomads.js';
+import * as weworkremotely from '../lib/adapters/weworkremotely.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -104,6 +108,55 @@ describe('the important one: repeated runs over real fixtures', () => {
     assert.equal(rec.first_seen, '2026-08-23T00:00:00.000Z', 'first_seen is preserved');
     assert.equal(rec.last_seen, '2026-08-24T00:00:00.000Z', 'last_seen advances');
     assert.equal(rec.title, `${jobs[0].title} (Updated)`); // stored record does track the latest title/url
+  });
+});
+
+// Board rows take company_token from each posting (companySlug, or
+// _unlisted-<id> when unnamed), so the dedupe tuple depends on parse() being
+// deterministic. Each run parses the fixtures afresh, as a real run would.
+describe('repeated runs over the real board fixtures', () => {
+  function boardJobs() {
+    const unnamed = [{
+      url: 'https://www.workingnomads.com/job/go/999004/', title: 'Backend Engineer',
+      description: '<p>x</p>', company_name: '', location: 'Europe',
+      pub_date: '2026-10-29T09:50:51-04:00',
+    }];
+    return [
+      ...jobicy.parse(loadFixture('jobicy.json'), { name: 'Jobicy', ats: 'jobicy', token: 'count=50&geo=greece&industry=engineering' }),
+      ...remotive.parse(loadFixture('remotive.json'), { name: 'Remotive', ats: 'remotive', token: 'software-dev' }),
+      ...workingnomads.parse(loadFixture('workingnomads.json'), { name: 'Working Nomads', ats: 'workingnomads', token: 'all' }),
+      ...workingnomads.parse(unnamed, { name: 'Working Nomads', ats: 'workingnomads', token: 'all' }),
+      ...weworkremotely.parse(
+        readFileSync(path.join(__dirname, 'fixtures', 'weworkremotely.xml'), 'utf8'),
+        { name: 'We Work Remotely (full-stack)', ats: 'weworkremotely', token: 'remote-full-stack-programming-jobs' },
+      ),
+    ];
+  }
+
+  test('second run over the same board postings produces zero new jobs', () => {
+    const jobs = boardJobs();
+    assert.equal(jobs.length, 18, 'sanity: 5 jobicy + 4 remotive + 4 workingnomads + 1 unnamed + 4 weworkremotely');
+
+    const first = selectNew(jobs, emptyState(), '2026-10-30T12:00:00.000Z');
+    assert.equal(first.fresh.length, 18, 'every board posting has its own key');
+
+    const second = selectNew(boardJobs(), first.nextState, '2026-10-31T12:00:00.000Z');
+    assert.equal(second.fresh.length, 0);
+    assert.equal(second.counts.known, 18);
+  });
+
+  test('a WWR posting is keyed by the company from its title and the slug from its link', () => {
+    const { nextState } = selectNew(boardJobs(), emptyState(), '2026-10-30T12:00:00.000Z');
+    assert.ok(
+      nextState.jobs['weworkremotely:fivetran:fivetran-global-alliance-lead-capgemini'],
+      Object.keys(nextState.jobs).join(' '),
+    );
+  });
+
+  test('the unnamed posting is keyed by its own id, not by the board', () => {
+    const { nextState } = selectNew(boardJobs(), emptyState(), '2026-10-30T12:00:00.000Z');
+    assert.ok(nextState.jobs['workingnomads:_unlisted-999004:999004'], Object.keys(nextState.jobs).join(' '));
+    assert.ok(!Object.keys(nextState.jobs).some((k) => k.split(':')[1] === 'all' || k.split(':')[1] === 'working-nomads'));
   });
 });
 
