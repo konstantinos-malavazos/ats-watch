@@ -18,12 +18,12 @@
 //   node tools/verify-feeds.mjs --all
 //   node tools/verify-feeds.mjs --dump    # print one raw posting, for adding a mapping
 
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { adapterFor } from '../lib/adapters/index.js';
-import { politeSequential, getJson } from '../lib/http.js';
+import { politeSequential, getJson, getText } from '../lib/http.js';
 import { makeLogger } from '../lib/log.js';
+import { loadSources } from '../lib/sources.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const CHECKED = ['url', 'location', 'posted_at', 'raw_description'];
@@ -32,13 +32,15 @@ const log = makeLogger();
 const all = process.argv.includes('--all');
 const dump = process.argv.includes('--dump');
 
-const raw = JSON.parse(await readFile(path.join(ROOT, 'companies.json'), 'utf8'));
-const list = (Array.isArray(raw) ? raw : raw.companies) ?? [];
+// sources.json, or the pre-rename companies.json when it is absent.
+const list = await loadSources(path.join(ROOT, 'sources.json'), log, {
+  fallbackPath: path.join(ROOT, 'companies.json'),
+});
 
 // One per ATS unless --all, so a casual run costs two requests, not sixteen.
 const targets = all ? list : [...new Map(list.map((c) => [c.ats, c])).values()];
 if (!targets.length) {
-  log.error('no companies configured');
+  log.error('no sources configured');
   process.exit(1);
 }
 
@@ -49,7 +51,9 @@ const { failures } = await politeSequential(
   targets,
   async (company) => {
     const adapter = adapterFor(company.ats);
-    const payload = await getJson(adapter.buildUrl(company.token), { log, timeoutMs: 30000 });
+    // An RSS adapter (format === 'rss') hands parse() the raw XML string.
+    const fetchPayload = adapter.format === 'rss' ? getText : getJson;
+    const payload = await fetchPayload(adapter.buildUrl(company.token), { log, timeoutMs: 30000 });
     const jobs = adapter.parse(payload, company);
     report.push({ company, jobs, payload });
     return jobs;
@@ -83,7 +87,11 @@ for (const { company, jobs, payload } of report) {
     // Lever returns a bare array. This is a diagnostic, so handle both here
     // rather than widening the adapter contract for it.
     const first = Array.isArray(payload) ? payload[0] : payload?.jobs?.[0];
-    if (first && typeof first === 'object') {
+    if (typeof payload === 'string') {
+      // RSS has no top-level keys to list; the raw item is the diagnostic.
+      console.log(`  the feed's own first item, for fixing ${emptyFields.join(', ')}:`);
+      console.log(indent(firstItem(payload), 4));
+    } else if (first && typeof first === 'object') {
       console.log(`  the provider's own top-level keys, for fixing ${emptyFields.join(', ')}:`);
       for (const [k, v] of Object.entries(first)) {
         const t = v === null ? 'null' : Array.isArray(v) ? `array[${v.length}]` : typeof v;
@@ -99,7 +107,7 @@ for (const { company, jobs, payload } of report) {
     // "object" without saying what is inside.
     const first = Array.isArray(payload) ? payload[0] : payload?.jobs?.[0];
     console.log('  raw posting (truncated):');
-    console.log(indent(JSON.stringify(first, replacer, 2), 4));
+    console.log(indent(typeof payload === 'string' ? firstItem(payload) : JSON.stringify(first, replacer, 2), 4));
   }
 
   const s = jobs[0];
@@ -116,6 +124,13 @@ function replacer(key, value) {
   return typeof value === 'string' && value.length > 120
     ? `${value.slice(0, 120)}...[${value.length} chars]`
     : value;
+}
+
+// First <item> block of an RSS payload, truncated like the JSON dump is.
+function firstItem(xml) {
+  const m = /<item\b[\s\S]*?<\/item>/.exec(xml);
+  if (!m) return '(no <item> block in the payload)';
+  return m[0].length > 1500 ? `${m[0].slice(0, 1500)}...[${m[0].length} chars]` : m[0];
 }
 
 function indent(text, n) {

@@ -1,6 +1,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { jobKey, jobId, normalise, isWellFormed, toIso, stripHtml, looksRemote, formatSalary } from '../lib/schema.js';
+import {
+  jobKey, jobId, normalise, isWellFormed, toIso, stripHtml, looksRemote, formatSalary,
+  ATS_KINDS, BOARDS, boardLabel, companySlug, boardCompany, UNLISTED_COMPANY,
+} from '../lib/schema.js';
 
 describe('jobKey / jobId stability', () => {
   const base = { ats: 'greenhouse', company_token: 'acme', ats_job_id: '42', title: 'Engineer', url: 'https://x', location: 'NYC' };
@@ -267,5 +270,83 @@ describe('formatSalary()', () => {
     assert.equal(formatSalary(undefined), '');
     assert.equal(formatSalary('nonsense'), '');
     assert.equal(formatSalary({}), '');
+  });
+});
+
+describe('BOARDS / boardLabel()', () => {
+  test('ATS_KINDS lists the company-feed kinds and every board', () => {
+    for (const k of ['greenhouse', 'lever', 'ashby', 'workable', ...Object.keys(BOARDS)]) {
+      assert.ok(ATS_KINDS.includes(k), `${k} missing from ATS_KINDS`);
+    }
+  });
+
+  test('a board ats gets its label, a company feed or unknown value gets ""', () => {
+    assert.equal(boardLabel('jobicy'), 'Jobicy');
+    assert.equal(boardLabel('weworkremotely'), 'We Work Remotely');
+    assert.equal(boardLabel('greenhouse'), '');
+    assert.equal(boardLabel('nope'), '');
+    assert.equal(boardLabel('toString'), '', 'prototype keys are not boards');
+    assert.equal(boardLabel(undefined), '');
+  });
+});
+
+describe('companySlug()', () => {
+  test('lowercases and joins words with single dashes', () => {
+    assert.equal(companySlug('Acme Corp'), 'acme-corp');
+    assert.equal(companySlug('ACME   corp'), 'acme-corp');
+  });
+
+  test('punctuation runs become one dash, ends trimmed', () => {
+    assert.equal(companySlug('Lemon.io'), 'lemon-io');
+    assert.equal(companySlug('  -Foo & Bar, Inc.- '), 'foo-bar-inc');
+    assert.equal(companySlug('Fivetran '), 'fivetran');
+  });
+
+  test('no suffix stripping', () => {
+    assert.notEqual(companySlug('Acme Inc'), companySlug('Acme'));
+  });
+
+  test('diacritics and non-latin letters are kept', () => {
+    assert.equal(companySlug('Société Générale'), 'société-générale');
+    assert.equal(companySlug('Ελληνική 2'), 'ελληνική-2');
+  });
+
+  test('empty, nullish or punctuation-only -> ""', () => {
+    assert.equal(companySlug(''), '');
+    assert.equal(companySlug('  '), '');
+    assert.equal(companySlug('--!!--'), '');
+    assert.equal(companySlug(null), '');
+    assert.equal(companySlug(undefined), '');
+  });
+});
+
+describe('boardCompany()', () => {
+  test('a named company keeps its trimmed name and slugs to the token', () => {
+    assert.deepEqual(boardCompany('  Proxify AB ', '42'), { company: 'Proxify AB', company_token: 'proxify-ab' });
+  });
+
+  test('empty or punctuation-only name -> unlisted, token unique to the posting', () => {
+    assert.deepEqual(boardCompany('', '42'), { company: UNLISTED_COMPANY, company_token: '_unlisted-42' });
+    assert.deepEqual(boardCompany(' - ', '43'), { company: '(company not listed)', company_token: '_unlisted-43' });
+    assert.deepEqual(boardCompany(undefined, '44'), { company: UNLISTED_COMPANY, company_token: '_unlisted-44' });
+  });
+
+  test('two unnamed postings never share a token', () => {
+    assert.notEqual(boardCompany('', 'a').company_token, boardCompany('', 'b').company_token);
+  });
+
+  test('an unlisted token cannot collide with a real company slug', () => {
+    assert.ok(!companySlug('_unlisted-42').startsWith('_'));
+    assert.notEqual(boardCompany('_unlisted-42', '1').company_token, boardCompany('', '42').company_token);
+  });
+
+  test('the row normalises and keys on the posting company, not the board', () => {
+    const row = normalise({
+      ats: 'jobicy', ...boardCompany('Acme', '7'), ats_job_id: '7',
+      title: 'Engineer', url: 'https://jobicy.com/jobs/7', remote: true,
+    });
+    assert.equal(row.company, 'Acme');
+    assert.equal(row.company_token, 'acme');
+    assert.equal(jobKey(row), 'jobicy:acme:7');
   });
 });

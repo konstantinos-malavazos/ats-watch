@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- REAL TRIMMED TEST DATA: 4 of 79 items from
+     https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss
+     fetched 2026-10-30. Items and their elements are verbatim except that each
+     description is cut after its first paragraph or two. -->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss">
+  <channel>
+    <title>We Work Remotely: Full-Stack Programming Jobs</title>
+    <link>https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss</link>
+    <description>We Work Remotely: Full-Stack Programming Jobs</description>
+    <language>en-US</language>
+    <ttl>60</ttl>
+    <item>
+      <title>Fivetran : Global Alliance Lead, Capgemini</title>
+      <region>Anywhere in the World</region>
+      <country>🇺🇸 United States of America</country>
+      <state></state>
+      <skills></skills>
+      <category>Full-Stack Programming</category>
+      <type>Full-Time</type>
+      <description>
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; Remote, Colorado, United States, AMER
+&lt;/p&gt;
+
+&lt;div class="content-intro"&gt;&lt;p&gt;From Fivetran’s founding until now, our mission has remained the same: to make access to data as simple and reliable as electricity. With Fivetran, customer data arrives in their warehouses, canonical and ready to query, with no engineering or maintenance required. We’re proud that more organizations continue to leverage our technology every day to become truly data-driven.&lt;/p&gt;</description>
+      <pubDate>Fri, 16 Oct 2026 07:30:50 +0000</pubDate>
+      <expires_at>Sun, 15 Nov 2026 07:30:50 +0000</expires_at>
+      <guid>https://weworkremotely.com/remote-jobs/fivetran-global-alliance-lead-capgemini</guid>
+      <link>https://weworkremotely.com/remote-jobs/fivetran-global-alliance-lead-capgemini</link>
+    </item>
+    <item>
+      <media:content url="https://wwr-pro.s3.amazonaws.com/logos/0161/6774/logo.gif" type="image/png"/>
+      <title>Yooli: FULL TIME: Software Engineer Position - React and Rest</title>
+      <region>Anywhere in the World</region>
+      <country></country>
+      <state>Telangana</state>
+      <skills></skills>
+      <category>Full-Stack Programming</category>
+      <type>Full-Time</type>
+      <description>&lt;img src="https://we-work-remotely.imgix.net/logos/0161/6774/logo.gif?ixlib=rails-4.0.0&amp;w=50&amp;h=50&amp;dpr=2&amp;fit=fill&amp;auto=compress" /&gt;
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; Australia
+    &lt;br /&gt;&lt;strong&gt;URL:&lt;/strong&gt; &lt;a href="http://yooli.co"&gt;http://yooli.co&lt;/a&gt;
+&lt;/p&gt;</description>
+      <pubDate>Wed, 05 Aug 2026 05:52:46 +0000</pubDate>
+      <expires_at>Tue, 03 Nov 2026 05:52:46 +0000</expires_at>
+      <guid>https://weworkremotely.com/remote-jobs/yooli-full-time-software-engineer-position-react-and-rest-1</guid>
+      <link>https://weworkremotely.com/remote-jobs/yooli-full-time-software-engineer-position-react-and-rest-1</link>
+    </item>
+    <item>
+      <title>Toptal: Senior Deployment Engineer with LLM and GPU Infrastructure experience</title>
+      <region>EMEA Only</region>
+      <country></country>
+      <state></state>
+      <skills></skills>
+      <category>Full-Stack Programming</category>
+      <type>Full-Time</type>
+      <description>
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; 
+&lt;/p&gt;
+
+&lt;p&gt;Summary&lt;/p&gt;&lt;p&gt;We are seeking an Infrastructure Engineer for Air-gapped LLM Deployments to support secure, large-scale software deployments in GPU-based environments. The role focuses on deploying LLM workloads in air-gapped settings and establishing observability with Grafana and Prometheus, with onsite presence in Riyadh required for two weeks per month.&lt;/p&gt;</description>
+      <pubDate>Thu, 22 Oct 2026 18:59:03 +0000</pubDate>
+      <expires_at>Sat, 21 Nov 2026 18:59:03 +0000</expires_at>
+      <guid>https://weworkremotely.com/remote-jobs/toptal-senior-deployment-engineer-with-llm-and-gpu-infrastructure-experience</guid>
+      <link>https://weworkremotely.com/remote-jobs/toptal-senior-deployment-engineer-with-llm-and-gpu-infrastructure-experience</link>
+    </item>
+    <item>
+      <title>Celonis: Client Value Partner (CVP) - Oil &amp; Gas Industry</title>
+      <region>Anywhere in the World</region>
+      <country></country>
+      <state></state>
+      <skills></skills>
+      <category>Full-Stack Programming</category>
+      <type>Full-Time</type>
+      <description>
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; Remote, US, Texas
+&lt;/p&gt;
+
+&lt;div class="content-intro"&gt;&lt;p&gt;Celonis is the trusted platform to industrialize Enterprise AI. At our core is the Celonis Context Model — which combines process data, business knowledge, and intelligence into a living digital twin of the enterprise that AI can actually understand, turning AI's operational blind spots into operational clarity. World's leading companies trust Celonis and its global ecosystem of partners to make their AI agents, people, systems, and processes work together, achieving transformational outcomes. We believe there's a massive opportunity to unlock global productivity and sustainability by giving AI the context to understand how every business process really works. Join our mission to make processes work for people, companies, and the planet.&lt;/p&gt;</description>
+      <pubDate>Tue, 20 Oct 2026 07:31:00 +0000</pubDate>
+      <expires_at>Thu, 19 Nov 2026 07:31:00 +0000</expires_at>
+      <guid>https://weworkremotely.com/remote-jobs/celonis-client-value-partner-cvp-oil-gas-industry</guid>
+      <link>https://weworkremotely.com/remote-jobs/celonis-client-value-partner-cvp-oil-gas-industry</link>
+    </item>
+  </channel>
+</rss>

@@ -1,4 +1,7 @@
 # Local run state. Ephemeral per install; never commit it.
+.job-watch-state.json
+.job-watch-state.json.tmp-*
+# Pre-rename (ats-watch) state, still read as a fallback until removed by hand.
 .ats-watch-state.json
 .ats-watch-state.json.tmp-*
 node_modules/
